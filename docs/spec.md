@@ -241,10 +241,17 @@ clearAllData(): Promise<void>
 
 ```
 .
-├── .github/workflows/
-│   ├── ci.yml          # PR: lint, typecheck, test, build
-│   └── deploy.yml      # main: build → GitHub Pages
-├── docs/               # 本仕様書
+├── .claude/
+│   └── settings.json   # エージェント用フックと権限の許可リスト（12.2 節）
+├── .github/
+│   ├── ISSUE_TEMPLATE/ # 受け入れ基準を必須にした Issue テンプレート
+│   ├── pull_request_template.md
+│   └── workflows/
+│       ├── ci.yml      # PR: pnpm verify（M5 以降は E2E も）
+│       └── deploy.yml  # main: build → GitHub Pages
+├── CLAUDE.md           # エージェント向けの約束事（12.2 節）
+├── docs/               # 本仕様書と設計書
+├── lefthook.yml        # pre-commit / pre-push フック
 ├── public/             # アイコン、manifest 用画像
 ├── src/
 │   ├── app/            # ルーティング、レイアウト、テーマ適用
@@ -274,7 +281,7 @@ CI では単体テストを必須、E2E は Chromium のみ実行する。
 
 ## 11. CI / CD
 
-- **ci.yml**: `pull_request` と `push`（main 以外）で `pnpm install --frozen-lockfile` → `biome ci` → `tsc --noEmit` → `vitest run` → `vite build` → `pnpm exec playwright install --with-deps chromium` → `pnpm exec playwright test`（Chromium のみ）。
+- **ci.yml**: `pull_request` と `push`（main 以外）で `pnpm install --frozen-lockfile` → `pnpm verify`（中身は `biome ci` → `tsc --noEmit` → `vitest run` → `vite build`。12.2 節 H-1） → `pnpm exec playwright install --with-deps chromium` → `pnpm verify:e2e`（Chromium のみ）。
   - Playwright は `playwright.config.ts` の `webServer` で `vite preview` を起動し、ビルド済み成果物に対して実行する。失敗時は `playwright-report` を `actions/upload-artifact` で保存する。
   - E2E 工程は M5 で追加する。それまでの CI は `vite build` までで終わる。
 - **deploy.yml**: `push` to `main` で `vite build --base=/checklist/` → `actions/upload-pages-artifact` → `actions/deploy-pages`。
@@ -282,12 +289,13 @@ CI では単体テストを必須、E2E は Chromium のみ実行する。
 
 ## 12. 開発計画（マイルストーン）
 
-実装（M0 以降）に入る前に詳細設計フェーズ（D）を置き、画面とデータを確定させる。各実装マイルストーンは単独で動く状態で main にマージできる粒度にする。
+実装（M0 以降）に入る前に詳細設計フェーズ（D）を置き、画面とデータを確定させる。M0 の直後にハーネス構築フェーズ（H）を置き、以降の機能マイルストーン（M1〜M5）は AI エージェント（Claude Code）が H で整えたループで進める。各実装マイルストーンは単独で動く状態で main にマージできる粒度にする。
 
 | M | 内容 | 完了条件 |
 | --- | --- | --- |
 | D | 詳細設計（12.1 節）: 画面設計とデータ設計を文書化し、本仕様書との差分を反映する | 設計書 2 本がレビューを経て main にマージされ、未決事項が残っていない |
 | M0 | プロジェクト初期化: Vite + React + TS、Tailwind、Biome、Vitest、CI、Pages デプロイ | 空のアプリが Pages で表示され、CI が緑 |
+| H | ハーネス構築（12.2 節）: エージェントが実装→検証→修正のループを自律的に回せる土台を整える | 12.2 節の完了条件をすべて満たし、M1 相当のダミー変更をエージェントがループだけで完了できる |
 | M1 | データ層と一覧・詳細: Dexie スキーマ、domain 関数、一覧表示、新規作成（リストのタイトルと、項目タイトルの追加・削除だけの最小フォーム）、チェック／解除、完了日時、リセット、削除 | US-1 / US-2 が通る |
 | M2 | 編集画面の完成: 項目タイトルの編集、補足メモ・URL・期限、タグ入力、ドラッグ並び替え、期限表示、バリデーション | FR-10〜15 が動く |
 | M3 | 書き出し・読み込み: ファイル形式、zod 検証、プレビュー、取り込み | US-4 / US-5 が通る |
@@ -314,6 +322,53 @@ CI では単体テストを必須、E2E は Chromium のみ実行する。
 - 操作ごとのデータ遷移: 6 章の各 API について、入力・前提条件・書き込む内容・`updatedAt` 更新の有無・失敗時の挙動を表で示す。
 - 設定データ: `localStorage` に置くキーと値の形式。
 - テストデータ: 単体テストと E2E で使う固定データ（境界値を含む）。
+
+### 12.2 ハーネス構築フェーズ（H）
+
+M1 以降の機能開発は AI エージェントに任せる前提で、エージェントが「計画 → 実装 → 検証 → 修正」のループを人の介在なしに回し、人はループの出口（PR）だけをレビューする体制を作る。ハーネスとは、そのループを成立させるための約束事・コマンド・自動チェック・フィードバック経路の総体を指す。
+
+**H-1 単一の検証コマンド（内側のループ）**
+
+- `pnpm verify` を唯一の合格判定とする。中身は `biome ci` → `tsc --noEmit` → `vitest run` → `vite build` の直列実行で、CI の `ci.yml` もこれを呼ぶだけにする。ローカルと CI で判定がずれないようにするため。
+- `pnpm verify:e2e` で Playwright（Chromium）を実行する。M5 以降は `verify` に含める。
+- 各コマンドは失敗箇所をファイル名と行番号付きで標準出力に出し、エージェントがそのまま次の修正に使えるようにする。Vitest は `--reporter=verbose`、Playwright は失敗時にトレースとスクリーンショットを `playwright-report/` に残す。
+- `pnpm dev` の起動と `pnpm verify` が、クリーンな環境で `pnpm install --frozen-lockfile` 直後に通ることを H の完了条件に含める。
+
+**H-2 エージェント向けの約束事（`CLAUDE.md`）**
+
+リポジトリ直下に置き、エージェントが毎回読む前提で次を書く。
+
+- プロジェクトの目的と、要件定義書・仕様書・設計書の場所。仕様と実装が食い違ったら仕様を直してから実装する、という優先順位。
+- 使うコマンド（`pnpm verify`、`pnpm dev`、`pnpm verify:e2e`）と、pnpm 以外を使わないこと。
+- 作業の進め方: Issue の受け入れ基準を読む → 失敗するテストを先に書く → 実装 → `pnpm verify` が通るまで修正 → 小さな PR。1 PR は 1 マイルストーンの一部に限定する。
+- コード規約のうち Biome で機械的に検出できないもの（ドメイン層だけが Dexie を触る、UI 文言は日本語、境界では zod で検証する、など）。
+- やってはいけないこと: テストのスキップや削除で緑にする、`--no-verify`、ロックファイルの手編集、cooldown の除外追加を黙って行う。
+
+**H-3 自動ガードレール**
+
+- Git フック（lefthook）: `pre-commit` で変更ファイルに `biome check --write`、`pre-push` で `pnpm verify`。
+- Claude Code のフック（`.claude/settings.json`）: ファイル編集後に Biome を当て、`pnpm verify` 以外の手段で CI を通そうとする操作（テストファイルの削除など）を警告する。
+- クラウドセッション用の `SessionStart` フック: セッション開始時に `pnpm install --frozen-lockfile` を走らせ、エージェントが最初から `pnpm verify` を実行できる状態にする。
+- 権限の許可リスト: `pnpm` の各スクリプトと読み取り系コマンドを事前承認し、エージェントが確認待ちで止まらないようにする。
+
+**H-4 作業単位の定義（外側のループ）**
+
+- GitHub Issue テンプレート: 「目的」「受け入れ基準（検証可能な箇条書き）」「対象外」「関連する仕様の節」を必須項目にする。マイルストーン M1〜M5 を、このテンプレートで Issue に分割する。
+- PR テンプレート: 「対応 Issue」「変更点」「`pnpm verify` の結果」「仕様書を更新したか」を必須項目にする。
+- ブランチ運用: `main` 直 push を禁止し、PR には CI 緑と 1 人以上のレビュー（Copilot レビューを含む自動レビューの指摘がすべて解決済み）を必須にする。
+- 自動レビュー: Copilot レビューを PR 作成時に自動で走らせ、指摘への対応もエージェントのループに含める。
+
+**H-5 ループの計測**
+
+- CI の所要時間と `pnpm verify` の所要時間を記録し、内側のループが 2 分、CI が 5 分を超えたら分割やキャッシュで短縮する。ループが遅いとエージェントは検証を省略し始めるため、速度そのものを品質要件として扱う。
+- 1 Issue あたりの PR 往復回数（人のレビューで差し戻した回数）を見て、2 回を超える Issue は受け入れ基準か `CLAUDE.md` の記述不足として扱い、ハーネス側を直す。
+
+**H の完了条件**
+
+1. クリーンな環境で `pnpm install --frozen-lockfile && pnpm verify` が通る。
+2. `CLAUDE.md`、Issue / PR テンプレート、lefthook、`.claude/settings.json`（フックと許可リスト）がそろっている。
+3. ブランチ保護が有効で、CI 緑と自動レビューの解決が必須になっている。
+4. 試験として、M1 の一部（例: 一覧画面にリストのタイトルを表示する）を Issue 化し、エージェントが人の操作なしに PR を作り、`pnpm verify` と自動レビューを通せる。
 
 ### M0 の具体的な初期タスク
 
