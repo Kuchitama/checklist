@@ -37,7 +37,7 @@ GitHub Pages に静的配置し、GitHub Actions で自動デプロイする。
 | CI / CD | GitHub Actions | PR で lint・型検査・テスト・ビルド。main で Pages へデプロイ |
 | パッケージ管理 | pnpm（10.16 以上） | ロックファイルを CI で固定。`minimumReleaseAge` による cooldown を使う（2.1 節） |
 
-Node.js は 22 LTS を前提とする。
+Node.js は **26**（2026-10-28 に Active LTS 入り。Node 22 / 24 は既に Maintenance）を前提とし、`.node-version` と `package.json` の `engines` で `26` に固定する。CI も同じファイルを参照する。
 
 ### 2.1 パッケージ管理ポリシー（pnpm）
 
@@ -175,7 +175,7 @@ db.version(1).stores({
   - チェック済みはタイトルに取り消し線、完了日時を `10/18 09:30` の形式で表示する。
 - **操作メニュー**（右上の「…」）: リセット、複製、書き出し、削除。
   - **リセット**: 「すべてのチェックを外しますか？」の確認後、全項目を `checked=false, checkedAt=null` にする。
-  - **複製**: 「<タイトル> のコピー」というタイトルで、チェック状態を除いた複製を作り、その詳細へ遷移する。
+  - **複製**: 「<タイトル> のコピー」というタイトルで、チェック状態を除いた複製を作り、その詳細へ遷移する。接尾辞を付けた結果が 100 文字（3.1 節）を超える場合は、元タイトルの末尾を切り詰めて接尾辞込みで 100 文字に収める。
   - **書き出し**: 4 章のファイルをダウンロードする。
   - **削除**: 確認後に削除し一覧へ戻る。
 - **全件完了時**: 進捗バーの横に「すべて完了」を表示し、リセットを促す。
@@ -187,7 +187,7 @@ db.version(1).stores({
 - **項目**: 1 行ずつ、タイトル・補足メモ・URL・期限を編集できる。補足メモ以下は「詳細」で開閉する。
   - 行末の「追加」で末尾に空行を追加し、フォーカスを移す。タイトル入力中の Enter でも次の行を追加する。
   - 各行にドラッグハンドルと削除ボタン。ドラッグ（マウス・タッチ）とキーボード（ハンドルにフォーカスして Space → 矢印 → Space）で並び替えられる。
-- **保存**: 入力はローカル状態に持ち、「保存」で一括保存して詳細へ戻る。「キャンセル」は変更を破棄（変更があれば確認）。
+- **保存**: 入力はローカル状態に持ち、「保存」で一括保存して詳細へ戻る。「キャンセル」は変更を破棄（変更があれば確認）。編集画面だけは明示的な保存を採る（要件 FR-41 の例外）。編集途中で誤って項目を消したときに戻せるようにするため。
   - 既存項目の `id`・`checked`・`checkedAt` は保持する。新規項目は `checked=false`。
 - **バリデーション**: タイトル空、文字数超過、URL が http(s) 以外のときは該当フィールド直下にエラーを出し保存を止める。
 
@@ -274,7 +274,9 @@ CI では単体テストを必須、E2E は Chromium のみ実行する。
 
 ## 11. CI / CD
 
-- **ci.yml**: `pull_request` と `push`（main 以外）で `pnpm install --frozen-lockfile` → `biome ci` → `tsc --noEmit` → `vitest run` → `vite build`。
+- **ci.yml**: `pull_request` と `push`（main 以外）で `pnpm install --frozen-lockfile` → `biome ci` → `tsc --noEmit` → `vitest run` → `vite build` → `pnpm exec playwright install --with-deps chromium` → `pnpm exec playwright test`（Chromium のみ）。
+  - Playwright は `playwright.config.ts` の `webServer` で `vite preview` を起動し、ビルド済み成果物に対して実行する。失敗時は `playwright-report` を `actions/upload-artifact` で保存する。
+  - E2E 工程は M5 で追加する。それまでの CI は `vite build` までで終わる。
 - **deploy.yml**: `push` to `main` で `vite build --base=/checklist/` → `actions/upload-pages-artifact` → `actions/deploy-pages`。
 - `base` はリポジトリ名に合わせ `/checklist/` とし、HashRouter を使うため SPA フォールバックは不要。
 
@@ -285,8 +287,8 @@ CI では単体テストを必須、E2E は Chromium のみ実行する。
 | M | 内容 | 完了条件 |
 | --- | --- | --- |
 | M0 | プロジェクト初期化: Vite + React + TS、Tailwind、Biome、Vitest、CI、Pages デプロイ | 空のアプリが Pages で表示され、CI が緑 |
-| M1 | データ層と一覧・詳細: Dexie スキーマ、domain 関数、一覧表示、新規作成（タイトルのみ）、チェック／解除、完了日時、リセット、削除 | US-1 / US-2 が通る |
-| M2 | 編集画面: 項目の追加・編集・削除、補足メモ・URL・期限、ドラッグ並び替え、期限表示 | FR-10〜15 が動く |
+| M1 | データ層と一覧・詳細: Dexie スキーマ、domain 関数、一覧表示、新規作成（リストのタイトルと、項目タイトルの追加・削除だけの最小フォーム）、チェック／解除、完了日時、リセット、削除 | US-1 / US-2 が通る |
+| M2 | 編集画面の完成: 項目タイトルの編集、補足メモ・URL・期限、タグ入力、ドラッグ並び替え、期限表示、バリデーション | FR-10〜15 が動く |
 | M3 | 書き出し・読み込み: ファイル形式、zod 検証、プレビュー、取り込み | US-4 / US-5 が通る |
 | M4 | 整理機能: タグ、タグ絞り込み、検索、複製 | US-6 / US-7 が通る |
 | M5 | PWA・テーマ・仕上げ: Service Worker、マニフェスト、更新通知、ダークモード、設定画面、E2E | 受け入れ基準（要件 8 章）をすべて満たす |
