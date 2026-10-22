@@ -64,7 +64,7 @@ export type Checklist = {
   title: string;         // 1〜100 文字、必須
   description: string;   // 0〜1000 文字。空文字可
   tags: string[];        // 各 1〜30 文字。重複なし。最大 20 個
-  items: ChecklistItem[];// 配列の順序 = 表示順
+  items: ChecklistItem[];// 配列の順序 = 表示順。最大 500 件
   createdAt: string;     // ISO 8601（UTC）
   updatedAt: string;     // ISO 8601（UTC）。項目のチェックでも更新する
 };
@@ -73,7 +73,7 @@ export type ChecklistItem = {
   id: string;            // UUID v4。リスト内で一意
   title: string;         // 1〜200 文字、必須
   note: string;          // 0〜2000 文字。複数行可。空文字可
-  url: string | null;    // http(s) のみ許可
+  url: string | null;    // http(s) のみ許可。最大 2000 文字
   dueDate: string | null;// "YYYY-MM-DD"（ローカル日付として解釈）
   checked: boolean;
   checkedAt: string | null; // ISO 8601。checked が false のとき必ず null
@@ -133,7 +133,7 @@ db.version(1).stores({
 
 ### 4.3 読み込みルール（FR-32〜34）
 
-1. JSON として解析できなければ「JSON ファイルとして読めません」と表示して中断。
+1. ファイルサイズが 5 MB を超えていれば「このアプリの書き出しファイルではありません」と表示して中断。JSON として解析できなければ「JSON ファイルとして読めません」と表示して中断。
 2. zod スキーマで検証する。`format` が `checklist-export` でない、または `version` が未対応なら「このアプリの書き出しファイルではありません」と表示して中断。項目の必須違反・文字数超過は該当箇所を示して中断。
 3. 検証に通ったらプレビュー（タイトル、タグ、項目一覧）を表示し、「取り込む」で確定する。
 4. 取り込み時に新しい `id` と各項目の `id` を採番し、`checked=false`、`checkedAt=null`、`createdAt=updatedAt=現在時刻` で保存する。
@@ -250,7 +250,7 @@ clearAllData(): Promise<void>
 │       ├── ci.yml      # PR: pnpm verify（M5 以降は E2E も）
 │       └── deploy.yml  # main: build → GitHub Pages
 ├── CLAUDE.md           # エージェント向けの約束事（12.2 節）
-├── docs/               # 本仕様書と設計書
+├── docs/               # 本仕様書と設計書（docs/design/）
 ├── lefthook.yml        # pre-commit / pre-push フック
 ├── public/             # アイコン、manifest 用画像
 ├── src/
