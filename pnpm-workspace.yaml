@@ -1,2 +1,8 @@
 # pnpm の設定。公開から 24 時間（1440 分）経っていないバージョンは依存解決の対象にしない（仕様書 2.1 節）
 minimumReleaseAge: 1440
+
+# lefthook だけはビルドスクリプト（postinstall の lefthook install）の実行を許可する。
+# pnpm 10 は既定で依存のスクリプトを止めるため、許可しないと install のたびに警告が出る。
+# 他の依存にスクリプト実行を許可するときは、理由を PR 本文に書く。
+onlyBuiltDependencies:
+  - lefthook

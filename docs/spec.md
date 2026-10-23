@@ -52,6 +52,7 @@ M0 時点で採用したバージョン（2026-10-23 確認: npm レジストリ
 | typescript | 7.0.2 | `tsc --noEmit` が使えることを確認 |
 | tailwindcss / @tailwindcss/vite | 4.3.3 | |
 | @biomejs/biome | 2.6.2 | |
+| lefthook | 2.2.2 | Git フック（pre-commit で整形、pre-push で verify）。H で導入 |
 | shadcn（CLI と実行時パッケージ） | 4.22.1 | `pnpm dlx shadcn@latest add <name>` で部品を追加する。v4 は実行時パッケージ `shadcn`（`shadcn/tailwind.css`）と `cn`（クラス結合）も依存に入る |
 | radix-ui / sonner / vaul | 1.8.1 / 2.0.8 / 1.1.2 | shadcn の部品が使うプリミティブ、トースト、ドロワー |
 | vitest | 5.0.5 | |
