@@ -25,3 +25,11 @@ export class ChecklistValidationError extends Error {
     super("入力に誤りがあります");
   }
 }
+
+/**
+ * 対象のリストまたは項目が存在しない（データ設計書 4 章）。
+ * 名前を NotFoundError にすると、Dexie が IndexedDB の同名の例外とみなして DexieError に包み直すため避ける。
+ */
+export class ChecklistNotFoundError extends Error {
+  override name = "ChecklistNotFoundError";
+}
