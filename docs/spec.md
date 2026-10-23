@@ -24,7 +24,7 @@ GitHub Pages に静的配置し、GitHub Actions で自動デプロイする。
 | 言語 | TypeScript（strict） | 要件 NFR-09 |
 | ビルド | Vite | 高速、PWA プラグインが充実 |
 | UI | React 19 | 要件 NFR-09。情報量が多く、周辺ライブラリが揃う |
-| ルーティング | react-router（HashRouter） | GitHub Pages ではパスベースのルーティングが 404 になるため hash 方式を採る |
+| ルーティング | react-router（`createHashRouter` + `RouterProvider`） | GitHub Pages ではパスベースのルーティングが 404 になるため hash 方式を採る。編集中の離脱確認に使う `useBlocker` はデータルーター専用のため、`<HashRouter>` ではなく `createHashRouter` で構成する |
 | 状態・永続化 | Dexie + dexie-react-hooks | IndexedDB を型付きで扱える。`useLiveQuery` で DB 変更が UI に自動反映される |
 | スタイル | Tailwind CSS | レスポンシブとダークモード（`dark:` バリアント）を少ない記述で実現 |
 | ドラッグ並び替え | @dnd-kit/core + @dnd-kit/sortable | タッチ対応、キーボード操作対応、軽量 |
@@ -146,7 +146,7 @@ db.version(1).stores({
 
 ## 5. 画面仕様
 
-ルーティングは HashRouter（例: `https://<host>/checklist/#/lists/<id>`）。
+ルーティングは react-router の `createHashRouter`（データルーター。URL は hash 形式。例: `https://<host>/checklist/#/lists/<id>`）。
 
 | パス | 画面 |
 | --- | --- |
@@ -285,7 +285,7 @@ CI では単体テストを必須、E2E は Chromium のみ実行する。
   - Playwright は `playwright.config.ts` の `webServer` で `vite preview` を起動し、ビルド済み成果物に対して実行する。失敗時は `playwright-report` を `actions/upload-artifact` で保存する。
   - E2E 工程は M5 で追加する。それまでの CI は `vite build` までで終わる。
 - **deploy.yml**: `push` to `main` で `vite build --base=/checklist/` → `actions/upload-pages-artifact` → `actions/deploy-pages`。
-- `base` はリポジトリ名に合わせ `/checklist/` とし、HashRouter を使うため SPA フォールバックは不要。
+- `base` はリポジトリ名に合わせ `/checklist/` とし、hash 形式のルーティングを使うため SPA フォールバックは不要。
 
 ## 12. 開発計画（マイルストーン）
 

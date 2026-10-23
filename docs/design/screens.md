@@ -48,7 +48,7 @@ flowchart LR
 | 全データ削除確認（2 段階） | 設定の「全データを削除」 | DB と設定を初期化して一覧へ |
 | 更新通知（トースト） | 新しい Service Worker の検出 | 「再読み込み」でページを更新 |
 
-ブラウザの「戻る」は HashRouter の履歴に従う。編集中に「戻る」を押したときも破棄確認を出す（`useBlocker`）。
+ブラウザの「戻る」は hash 形式の履歴に従う。編集中に「戻る」を押したときも破棄確認を出す。これには react-router の `useBlocker` を使うが、このフックはデータルーター専用で `<HashRouter>` 配下では実行時エラーになるため、ルーターは `createHashRouter` + `RouterProvider` で構成する（仕様書 2 章・5 章）。ルート定義は `src/app/router.tsx` に 1 箇所で持つ。
 
 ## 2. 共通レイアウト
 
