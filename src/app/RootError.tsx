@@ -10,7 +10,7 @@ export function RootError() {
       <h1 className="mb-4 text-xl font-bold">チェックリスト</h1>
       <ErrorState
         title="問題が発生しました"
-        description="ページを再読み込みしても解決しない場合は、ブラウザを再起動してください。"
+        description="再読み込みしてください。"
         onRetry={() => window.location.reload()}
       />
     </main>
