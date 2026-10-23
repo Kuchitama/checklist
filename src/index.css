@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+/* ダークモードは html.dark で切り替える（仕様書 8 章、画面設計書 7.3 節） */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 色は画面設計書 2.2 節の表に従う。コントラストは実装時に計測して調整する */
+:root {
+  --bg: #ffffff;
+  --bg-card: #f6f7f9;
+  --fg: #1a1d21;
+  --fg-muted: #5c6670;
+  --border: #d9dde2;
+  --accent: #2563eb;
+  --danger: #dc2626;
+  --warning: #d97706;
+  --success: #16a34a;
+}
+
+:root.dark {
+  --bg: #111418;
+  --bg-card: #1b2027;
+  --fg: #e6e8eb;
+  --fg-muted: #9aa4ae;
+  --border: #2c333c;
+  --accent: #60a5fa;
+  --danger: #f87171;
+  --warning: #fbbf24;
+  --success: #4ade80;
+}
+
+html {
+  background: var(--bg);
+  color: var(--fg);
+  font-family:
+    system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", sans-serif;
+}

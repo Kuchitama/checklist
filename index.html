@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>チェックリスト</title>
+    <script>
+      // 初回描画のちらつきを防ぐため、React の起動前にテーマを決める（画面設計書 7.3 節）
+      (() => {
+        try {
+          const raw = localStorage.getItem("checklist.settings");
+          const theme = raw ? JSON.parse(raw).theme : "system";
+          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          if (theme === "dark" || (theme !== "light" && prefersDark)) {
+            document.documentElement.classList.add("dark");
+          }
+        } catch {
+          // localStorage が使えない環境では OS 設定に従う既定のまま
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
