@@ -1,13 +1,10 @@
-# gitleaks の設定（docs/security.md）。既定のルール一式を使い、生成物だけ対象から外す。
+# gitleaks の設定（docs/security.md）。既定のルール一式をそのまま使う。
+# 追跡しているファイルは除外しない。誤検知があれば、検出ごとの fingerprint を理由つきでここに加える。
 title = "checklist"
 
 [extend]
 useDefault = true
 
 [allowlist]
-description = "機械生成ファイルと、秘密情報を含まないことが構造上明らかなもの"
-paths = [
-  '''pnpm-lock\.yaml$''',
-  '''^dist/''',
-  '''^node_modules/''',
-]
+description = "誤検知の fingerprint（<commit>:<path>:<rule>:<line>）。追加するときは PR 本文に理由を書く"
+regexes = []
