@@ -72,22 +72,22 @@ flowchart LR
 
 ### 2.2 テーマと色
 
-CSS 変数で定義し、Tailwind の `darkMode: 'class'` で切り替える。
+shadcn/ui のテーマトークンを CSS 変数として `src/index.css` に定義し、Tailwind v4 の `@custom-variant dark` と `html.dark` クラスで切り替える（仕様書 8 章）。shadcn の Nova プリセット（neutral）が生成する値を基準にし、本アプリ固有の 2 トークンを追加する。
 
-| 変数 | 用途 | ライト | ダーク |
-| --- | --- | --- | --- |
-| `--bg` | 画面背景 | `#ffffff` | `#111418` |
-| `--bg-card` | カード、入力欄の背景 | `#f6f7f9` | `#1b2027` |
-| `--fg` | 本文 | `#1a1d21` | `#e6e8eb` |
-| `--fg-muted` | 補助文字（日時、プレースホルダ） | `#5c6670` | `#9aa4ae` |
-| `--border` | 罫線 | `#d9dde2` | `#2c333c` |
-| `--accent` | 主ボタン、チェック済み、進捗バー | `#2563eb` | `#60a5fa` |
-| `--danger` | 削除、期限超過 | `#dc2626` | `#f87171` |
-| `--warning` | 今日が期限 | `#d97706` | `#fbbf24` |
-| `--success` | すべて完了 | `#16a34a` | `#4ade80` |
+| トークン | 用途 | 備考 |
+| --- | --- | --- |
+| `--background` / `--foreground` | 画面背景 / 本文 | shadcn 標準 |
+| `--card` / `--card-foreground` | カード、入力欄の背景 / その文字 | shadcn 標準 |
+| `--muted` / `--muted-foreground` | 補助領域 / 補助文字（日時、プレースホルダ） | shadcn 標準 |
+| `--border` / `--input` / `--ring` | 罫線 / 入力欄の枠 / フォーカスリング | shadcn 標準 |
+| `--primary` / `--primary-foreground` | 主ボタン、チェック済み、進捗バー | shadcn 標準 |
+| `--destructive` | 削除、期限超過 | shadcn 標準 |
+| `--warning` | 今日が期限 | 本アプリで追加。ライト `#d97706`、ダーク `#fbbf24` |
+| `--success` | すべて完了 | 本アプリで追加。ライト `#16a34a`、ダーク `#4ade80` |
 
-- 本文と背景のコントラスト比は両テーマで 4.5:1 以上。`--fg-muted` も 4.5:1 以上を満たす値を選ぶ。
-- 実装時に上記の値でコントラストを計測し、満たさなければ値を調整して本表を更新する。
+- 本文と背景のコントラスト比は両テーマで 4.5:1 以上。`--muted-foreground` も 4.5:1 以上を満たす値を選ぶ。
+- 実装時に生成された値でコントラストを計測し、満たさなければ値を調整して本表に追記する。
+- Tailwind のクラスでは `bg-background`、`text-muted-foreground`、`bg-primary`、`text-destructive` のように shadcn が `@theme inline` で定義した名前で参照する。`--warning` / `--success` も同じ仕組みで `text-warning`、`bg-success` として使えるよう `@theme inline` に登録する。
 
 ### 2.3 文字サイズ
 
@@ -320,7 +320,20 @@ CSS 変数で定義し、Tailwind の `darkMode: 'class'` で切り替える。
 
 ## 4. コンポーネント一覧
 
-`src/components/` に置く再利用部品。画面固有のものは `src/pages/<画面>/` の中に置き、ここには載せない。
+`src/components/` に置く再利用部品。画面固有のものは `src/pages/<画面>/` の中に置き、ここには載せない。基礎部品は shadcn/ui から `src/components/ui/` にコピーしたものを使い、本アプリの部品はそれを組み合わせて作る。
+
+| 本アプリの部品 | 使う shadcn/ui の部品 |
+| --- | --- |
+| `Button` / `IconButton` | `button`（`variant`: default / secondary / destructive / ghost、`size`: icon） |
+| `TextField` / `TextArea` | `input` / `textarea` + `label` |
+| `TagChip` | `badge` |
+| `ProgressBar` | `progress` |
+| `ChecklistItemRow` のチェックボックス | `checkbox` |
+| `ConfirmDialog` | `alert-dialog` |
+| `ActionMenu` | `dropdown-menu`（720px 以上）/ `drawer`（640px 未満のボトムシート） |
+| `Toast` | `sonner` |
+| 設定のテーマ選択 | `radio-group` |
+| `DropZone`、`SortableList`、`TagInput`、`ItemEditorRow`、`EmptyState`、`ErrorState`、`AppShell`、`ThemeProvider` | 独自実装（shadcn に対応する部品がない） |
 
 | コンポーネント | 役割 | props | イベント |
 | --- | --- | --- | --- |
