@@ -1,5 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
 import { makeChecklist } from "@/test/fixtures";
 import { ListIndex } from "./ListIndex";
@@ -41,5 +42,45 @@ describe("ListIndex", () => {
       await screen.findByRole("heading", { level: 2, name: "あとから追加" }),
     ).toBeInTheDocument();
     expect(screen.queryByText("まだチェックリストがありません")).not.toBeInTheDocument();
+  });
+});
+
+describe("ListIndex のエラー状態", () => {
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await db.checklists.clear();
+  });
+
+  it("読み取りに失敗したら案内と再試行ボタンを表示し、再試行で一覧を読み直す", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await db.checklists.put(makeChecklist({ id: "r", title: "再試行で見えるリスト" }));
+    const orderBy = vi.spyOn(db.checklists, "orderBy").mockImplementation(() => {
+      throw new Error("一時的な読み取り失敗");
+    });
+
+    render(<ListIndex />);
+
+    expect(await screen.findByText("リストを読み込めませんでした")).toBeInTheDocument();
+    orderBy.mockRestore();
+    await userEvent.click(screen.getByRole("button", { name: "再試行" }));
+
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "再試行で見えるリスト" }),
+    ).toBeInTheDocument();
+  });
+
+  it("DB を開けない環境では保存できない旨と対処を表示し、再試行ボタンは出さない", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(db.checklists, "orderBy").mockImplementation(() => {
+      const error = new Error("IndexedDB を開けません");
+      error.name = "OpenFailedError";
+      throw error;
+    });
+
+    render(<ListIndex />);
+
+    expect(await screen.findByText("データを保存できない環境です")).toBeInTheDocument();
+    expect(screen.getByText(/プライベートブラウズ/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "再試行" })).not.toBeInTheDocument();
   });
 });
