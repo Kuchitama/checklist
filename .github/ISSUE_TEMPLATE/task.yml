@@ -1,0 +1,45 @@
+name: 作業（タスク）
+description: エージェントまたは人が 1 つの PR で完了させる作業の単位。受け入れ基準を検証可能な形で書く
+title: "[M?] "
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        1 Issue = 1 PR。マイルストーン（仕様書 12 章）の一部を切り出して書く。受け入れ基準は「テストや操作で確認できる文」にする。
+  - type: textarea
+    id: goal
+    attributes:
+      label: 目的
+      description: この作業で何ができるようになるか。利用者の視点で 1〜3 文
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 受け入れ基準
+      description: 検証可能な箇条書き。1 行 1 基準。単体テストや E2E で確認する方法を添える
+      placeholder: |
+        - [ ] 一覧画面にリストのタイトルが updatedAt 降順で表示される（単体テスト: ListIndex.test.tsx）
+        - [ ] リストが 0 件のとき空状態の文言が表示される
+    validations:
+      required: true
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: 対象外
+      description: この Issue でやらないこと。隣接する機能で混同しやすいものを書く
+    validations:
+      required: true
+  - type: input
+    id: spec
+    attributes:
+      label: 関連する仕様の節
+      description: 仕様書・設計書の節番号（例 仕様書 5.1 節、画面設計書 3.1 節、データ設計書 4 章）
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: 補足
+      description: 判断に必要な前提や、過去の議論へのリンク
