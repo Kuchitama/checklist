@@ -222,7 +222,7 @@ searchChecklists(query: string, tags: string[]): Promise<Checklist[]>
 clearAllData(): Promise<void>
 ```
 
-`ChecklistInput` は `Checklist` から `id / createdAt / updatedAt` を除き、項目から `checked / checkedAt` を省略可にした型。
+`ChecklistInput` は `title / description / tags / items` を持つ。項目（`ChecklistItemInput`）は `title / note / url / dueDate` と、既存項目にだけ付く省略可能な `id` を持ち、新規項目は `id` を持たない。`checked / checkedAt` は入力に含めず、`createChecklist` は `false / null` で作り、`updateChecklist` は既存項目から引き継ぐ。型の定義はデータ設計書 1.4 節、マージ規則は同 4.1 節。
 
 ## 7. PWA
 
