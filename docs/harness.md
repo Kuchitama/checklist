@@ -13,7 +13,7 @@
 | H-1 検証 | `pnpm verify`（`biome ci` → `tsc --noEmit` → `vitest run` → `vite build`）が唯一の合格判定。CI も同じコマンドを呼ぶ | `package.json`、`.github/workflows/ci.yml` | M0 |
 | H-2 約束事 | 文書の優先順位、既定値、作業手順、レビュー対応の型、禁止事項 | `CLAUDE.md` | H |
 | H-3 Git フック | pre-commit で変更ファイルを Biome 整形、pre-push で `pnpm verify`。`pnpm install` 時の `prepare` で有効化 | `lefthook.yml` | H |
-| H-3 Claude Code フック | セッション開始時に依存を導入。Bash の禁止コマンド（フックの迂回、テスト削除、main への force push、npm / npx / yarn）を拒否。編集後に Biome 整形 | `.claude/settings.json`、`.claude/hooks/` | H |
+| H-3 Claude Code フック | セッション開始時に `pnpm install --frozen-lockfile` で依存をロックファイルに同期（`prepare` で lefthook も有効化）。Bash の禁止コマンド（フックの迂回、テスト削除、main への force push、npm / npx / yarn）を拒否。編集後に Biome 整形 | `.claude/settings.json`、`.claude/hooks/` | H |
 | H-3 権限 | pnpm、node、git の日常操作、読み取り系コマンドを事前承認し、確認待ちで止まらないようにする | `.claude/settings.json` | H |
 | H-4 作業単位 | Issue テンプレート（目的・受け入れ基準・対象外・関連する仕様の節）、PR テンプレート（対応 Issue・変更内容・検証・レビュー点） | `.github/ISSUE_TEMPLATE/`、`.github/pull_request_template.md` | H |
 | H-4 自動レビュー | Copilot のコードレビューを PR 作成時に自動実行。指摘への対応はエージェントのループに含める | リポジトリ設定 | 導入済み |
@@ -58,5 +58,5 @@
 ## 5. 既知の制約
 
 - Claude Code のフックは、セッション開始時に `.claude/settings.json` が存在していた場合にだけ自動で読み込まれる。このファイルを初めて取り込んだ後は、`/hooks` を一度開くかセッションを再起動する。
-- `guard-bash` の禁止判定は正規表現による。ヒアドキュメントと引用文字列の中身は判定しないが、コマンド位置に禁止語が来る書き方は拒否される。その場合は別の書き方にする（禁止を解除する設定は置かない）。
+- `guard-bash` はコマンド文字列をシェル風に単語分割し、各単純コマンドの先頭語と引数で判定する。ヒアドキュメントの本文は判定しない。引用された引数（`rm "a.test.ts"`）は引用を外して判定する。`echo "rm a.test.ts"` のように引数の中に禁止語があるだけでは拒否しない。`sudo` や `VAR=x` の前置き、`/usr/bin/git` のようなパスつき呼び出しにも対応する。判定の網羅性には限りがあるため、最後の砦はブランチ保護と CI である（禁止を解除する設定は置かない）。
 - lefthook は `git commit` / `git push` を行う環境に Node.js と pnpm があることを前提にする。GitHub の Web UI からのマージには関与しない。
