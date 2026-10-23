@@ -232,37 +232,50 @@ export type ExportFile = {
 import { z } from "zod";
 
 const cpLength = (s: string) => Array.from(s).length;
-const cpMax = (max: number, message: string) =>
-  (s: string) => cpLength(s) <= max || message; // refine 用
 
-const httpUrl = z
-  .string()
-  .max(2000)
-  .refine((s) => {
-    try { const u = new URL(s); return u.protocol === "http:" || u.protocol === "https:"; }
-    catch { return false; }
-  }, "http または https の URL を入力してください");
+/**
+ * 各検証は boolean で判定し、違反時は custom issue の params.code に
+ * ドメインの ValidationIssue.code を入れる。文言はスキーマに書かず、
+ * 5.3 節の変換層で画面設計書 6.1 節の表から引く。
+ */
+const cpMax = (max: number) => (s: string, ctx: z.RefinementCtx) => {
+  if (cpLength(s) > max) ctx.addIssue({ code: "custom", params: { code: "too_long", max } });
+};
 
-const isoDate = z
-  .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/)
-  .refine((s) => {
-    const [y, m, d] = s.split("-").map(Number);
-    const dt = new Date(Date.UTC(y, m - 1, d));
-    return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
-  }, "存在する日付を入力してください");
+const httpUrl = (s: string, ctx: z.RefinementCtx) => {
+  let ok = false;
+  try {
+    const u = new URL(s);
+    ok = u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    ok = false;
+  }
+  if (!ok) ctx.addIssue({ code: "custom", params: { code: "invalid_url" } });
+};
+
+const isoDate = (s: string, ctx: z.RefinementCtx) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  let ok = false;
+  if (m) {
+    const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+    const dt = new Date(Date.UTC(y, mo - 1, d));
+    ok = dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+  }
+  if (!ok) ctx.addIssue({ code: "custom", params: { code: "invalid_date" } });
+};
 
 export const exportItemSchema = z.object({
-  title: z.string().trim().min(1).refine(cpMax(200, "項目名は 200 文字以内です")),
-  note: z.string().default("").refine(cpMax(2000, "補足メモは 2000 文字以内です")),
-  url: httpUrl.nullable().default(null),
-  dueDate: isoDate.nullable().default(null),
+  title: z.string().trim().min(1).superRefine(cpMax(200)),
+  note: z.string().default("").superRefine(cpMax(2000)),
+  // 上限はコードポイント数で判定する（1.1 節）。zod の .max() は UTF-16 単位なので使わない
+  url: z.string().trim().superRefine(cpMax(2000)).superRefine(httpUrl).nullable().default(null),
+  dueDate: z.string().superRefine(isoDate).nullable().default(null),
 });
 
 export const exportChecklistSchema = z.object({
-  title: z.string().trim().min(1).refine(cpMax(100, "タイトルは 100 文字以内です")),
-  description: z.string().default("").refine(cpMax(1000, "説明は 1000 文字以内です")),
-  tags: z.array(z.string().trim().min(1).refine(cpMax(30, "タグは 30 文字以内です"))).max(20).default([]),
+  title: z.string().trim().min(1).superRefine(cpMax(100)),
+  description: z.string().default("").superRefine(cpMax(1000)),
+  tags: z.array(z.string().trim().min(1).superRefine(cpMax(30))).max(20).default([]),
   items: z.array(exportItemSchema).max(500).default([]),
 });
 
@@ -277,6 +290,8 @@ export const exportFileV1Schema = z.object({
 - 未知のキーは **無視**する（zod の既定。`strict()` にしない）。同一バージョン内で将来キーが増えても旧版が読めるようにするため。
 - `note`、`url`、`dueDate`、`description`、`tags`、`items` は欠けていても既定値で補う。`title` と `format`、`version`、`exportedAt` は必須。
 - スキーマは `src/domain/schema.ts` に置き、入力型の検証（1.5 節）にも同じ部品を使う。
+- 文字列の長さ判定はすべて `cpMax`（コードポイント数）で行い、zod の `.max()`（UTF-16 コード単位）は文字列に使わない。配列の件数には `.max()` を使う。
+- 単体テストで「上限ちょうどは通り、上限 + 1 文字は `too_long` で拒否される」ことを、絵文字を含む文字列（7 章 `emoji-title`）でも確認する。
 
 ### 5.3 読み込みの判定順序と `ImportError`
 
