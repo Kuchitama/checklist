@@ -68,7 +68,7 @@ export type ChecklistItemInput = {
 ```ts
 export type ValidationIssue = {
   path: (string | number)[]; // 例: ["title"], ["items", 3, "url"]
-  code: "required" | "too_long" | "too_many" | "invalid_url" | "invalid_date" | "unknown_id";
+  code: "required" | "too_long" | "too_many" | "invalid_url" | "invalid_date" | "invalid_type" | "unknown_id";
   message: string;           // 画面にそのまま出す日本語
 };
 ```
@@ -306,12 +306,44 @@ export type ImportError =
 1. `JSON.parse` に失敗 → `INVALID_JSON`。
 2. 値がオブジェクトでない、または `format !== "checklist-export"` → `NOT_EXPORT_FILE`。
 3. `version` が整数でない、または `1` でない → `UNSUPPORTED_VERSION`。将来 `version: 2` を導入したら、ここで `1 → 2` の変換関数を挟む。
-4. `exportFileV1Schema.safeParse` に失敗 → `VALIDATION`。zod の `issues[].path` と `message` を `ValidationIssue` に写す。
+4. `exportFileV1Schema.safeParse` に失敗 → `VALIDATION`。zod の issue を 5.3.1 節の規則で `ValidationIssue` に変換する。zod の `message` は使わない。
 5. 成功 → `ExportFile` を返す。
 
 ファイルサイズは読み込み前に `File.size` で判定し、**20 MB（20,000,000 バイト）** を超えていれば `NOT_EXPORT_FILE` として扱う。
 
 上限の根拠: 各フィールドが上限いっぱいのリストを本アプリ自身が書き出した場合の理論最大を下回ってはならない。最悪ケース（500 項目すべてでタイトル 200 文字・メモ 2000 文字・URL 2000 文字、全文字が 4 バイトの UTF-8 または 6 バイトの JSON エスケープ `\uXXXX` になる場合）で、項目 1 件あたり約 25 KB、リスト全体で約 13 MB（2 スペースの整形を含む）。20 MB はこれに余裕を持たせた値で、仕様書 4.3 節と画面設計書 3.4 節も同じ値にする。上限を変えるときは 3 箇所を同時に直す。
+
+#### 5.3.1 zod の issue から `ValidationIssue` への変換
+
+変換関数 `toValidationIssues(error: z.ZodError): ValidationIssue[]` を `src/domain/schema.ts` に置き、読み込み（5.3 節）と入力検証（1.5 節）の両方で使う。スキーマには文言を書かず、文言はここで画面設計書 6.1 節の表から引く。
+
+**code の決め方**
+
+| zod の issue | 変換後の `code` |
+| --- | --- |
+| `custom` で `params.code` がある | `params.code` の値（`too_long` / `invalid_url` / `invalid_date`） |
+| `too_small`（文字列。`.min(1)` 違反） | `required` |
+| `too_big`（配列。`.max(20)` / `.max(500)` 違反） | `too_many` |
+| `invalid_type`（`undefined` や `null` を含む型違い）、`invalid_literal`、`invalid_string`（`exportedAt` の datetime 違反）、`invalid_union`、上記以外 | `invalid_type` |
+
+**path**: zod の `path` をそのまま使う（例 `["checklist", "items", 0, "url"]`）。
+
+**フィールド名**: `path` の末尾の文字列要素（配列インデックスは飛ばす）を、親に `items` があるかどうかと合わせて次の表で日本語にする。
+
+| 末尾の要素 | 親に `items` あり | 親に `items` なし |
+| --- | --- | --- |
+| `title` | 項目名 | タイトル |
+| `note` | 補足メモ | — |
+| `url` | URL | — |
+| `dueDate` | 期限 | — |
+| `description` | — | 説明 |
+| `tags` | — | タグ |
+| `items` | — | 項目 |
+| `format` / `version` / `exportedAt` / `checklist` | — | ファイル形式 |
+
+**message**: 画面設計書 6.1 節の表を（`code`, フィールド名）で引く。該当がなければ同表の「汎用」の行を `code` で引く。
+
+**画面への表示**: 読み込み画面では `path` に `items` のインデックス `i` が含まれるとき「項目 i+1 の <フィールド名>: <message>」、含まれないとき「<フィールド名>: <message>」の形で出す。編集画面では `path` に対応する入力欄の直下に `message` だけを出す。
 
 ### 5.4 書き出しファイル名
 
