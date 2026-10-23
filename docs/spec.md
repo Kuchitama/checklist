@@ -56,6 +56,7 @@ M0 時点で採用したバージョン（2026-10-23 確認: npm レジストリ
 | shadcn（CLI と実行時パッケージ） | 4.22.1 | `pnpm dlx shadcn@latest add <name>` で部品を追加する。v4 は実行時パッケージ `shadcn`（`shadcn/tailwind.css`）と `cn`（クラス結合）も依存に入る |
 | radix-ui / sonner / vaul | 1.8.1 / 2.0.8 / 1.1.2 | shadcn の部品が使うプリミティブ、トースト、ドロワー |
 | vitest | 5.0.5 | |
+| @testing-library/user-event | 14.6.8 | クリックなど利用者の操作を再現する単体テスト用（#8 で導入） |
 | dexie / dexie-react-hooks | 4.4.6 / 4.4.0 | |
 | zod | 4.6.7 | |
 
