@@ -27,6 +27,7 @@ GitHub Pages に静的配置し、GitHub Actions で自動デプロイする。
 | ルーティング | react-router（`createHashRouter` + `RouterProvider`） | GitHub Pages ではパスベースのルーティングが 404 になるため hash 方式を採る。編集中の離脱確認に使う `useBlocker` はデータルーター専用のため、`<HashRouter>` ではなく `createHashRouter` で構成する |
 | 状態・永続化 | Dexie + dexie-react-hooks | IndexedDB を型付きで扱える。`useLiveQuery` で DB 変更が UI に自動反映される |
 | スタイル | Tailwind CSS v4 | レスポンシブとダークモード（`dark:` バリアント）を少ない記述で実現。v4 は設定を CSS ファイル側（`@import "tailwindcss"` と `@custom-variant`）で行い、`tailwind.config.ts` は持たない |
+| UI コンポーネント | shadcn/ui（Radix UI プリミティブ、Nova プリセット） | ボタン、入力、ダイアログ、メニューなどのアクセシブルな部品を `src/components/ui/` にソースとしてコピーして使う。依存ではなく自分のコードになるため、設計書の文言や挙動に合わせて自由に改変できる。アイコンは lucide-react |
 | ドラッグ並び替え | @dnd-kit/core + @dnd-kit/sortable | タッチ対応、キーボード操作対応、軽量 |
 | バリデーション | zod | 読み込みファイルの検証と型の共有 |
 | ID 生成 | `crypto.randomUUID()` | 追加依存なし |
@@ -51,6 +52,7 @@ M0 時点で採用したバージョン（2026-10-23 確認: npm レジストリ
 | typescript | 7.0.2 | `tsc --noEmit` が使えることを確認 |
 | tailwindcss / @tailwindcss/vite | 4.3.3 | |
 | @biomejs/biome | 2.6.2 | |
+| shadcn（CLI） | 4.22.1 | `pnpm dlx shadcn@latest add <name>` で部品を追加する |
 | vitest | 5.0.5 | |
 | dexie / dexie-react-hooks | 4.4.6 / 4.4.0 | |
 | zod | 4.6.7 | |
@@ -248,10 +250,10 @@ clearAllData(): Promise<void>
 
 ## 8. テーマ・デザイン方針
 
-- Tailwind v4 の `@custom-variant dark (&:where(.dark, .dark *))` を `src/index.css` に置き、`html` の `dark` クラスで切り替える。設定が「OS に合わせる」のときは `prefers-color-scheme` を監視して `dark` クラスを付け外しする。
-- 色は CSS 変数（背景、文字、アクセント、危険、警告）で定義し、両テーマでコントラスト比 4.5:1 以上を保つ。
+- Tailwind v4 の `@custom-variant dark` を `src/index.css` に置き、`html` の `dark` クラスで切り替える。設定が「OS に合わせる」のときは `prefers-color-scheme` を監視して `dark` クラスを付け外しする。
+- 色は shadcn/ui のテーマトークン（`--background`、`--foreground`、`--card`、`--muted-foreground`、`--border`、`--primary`、`--destructive` など）を CSS 変数として `src/index.css` に定義し、本アプリ固有の `--warning`（今日が期限）と `--success`（すべて完了）を追加する。両テーマでコントラスト比 4.5:1 以上を保つ。トークン名と値は画面設計書 2.2 節で確定する。
 - タップ領域は最小 44px。チェックボックスは行全体をタップ可能にする。
-- フォントはシステムフォント。アイコンは lucide-react。
+- フォントはシステムフォント（shadcn の Geist は読み込まない。外部通信をしない要件 NFR-07 のため）。アイコンは lucide-react。
 
 ## 9. ディレクトリ構成
 
@@ -272,7 +274,8 @@ clearAllData(): Promise<void>
 ├── src/
 │   ├── app/            # ルーティング、レイアウト、テーマ適用
 │   ├── pages/          # 画面単位のコンポーネント（ListIndex, ListDetail, ListEdit, Import, Settings）
-│   ├── components/     # 再利用部品（Checkbox 行, TagChip, ProgressBar, ConfirmDialog など）
+│   ├── components/     # 再利用部品（画面設計書 4 章）
+│   │   └── ui/         # shadcn/ui からコピーした部品。CLI で追加し、必要なら直接改変する
 │   ├── domain/         # 型、zod スキーマ、操作関数、書き出し/読み込み
 │   ├── db/             # Dexie 定義
 │   ├── lib/            # 日付整形、文字列正規化、ファイルダウンロードなどの小道具
@@ -280,6 +283,7 @@ clearAllData(): Promise<void>
 ├── e2e/                # Playwright
 ├── .node-version       # Node.js のメジャーバージョン
 ├── biome.json
+├── components.json      # shadcn/ui の設定（スタイル、パス別名、CSS の場所）
 ├── pnpm-workspace.yaml  # minimumReleaseAge（cooldown）
 ├── vite.config.ts       # Vite と Vitest の設定（Tailwind v4 は @tailwindcss/vite で読み込む）
 └── package.json

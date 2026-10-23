@@ -1,36 +1,98 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
 /* ダークモードは html.dark で切り替える（仕様書 8 章、画面設計書 7.3 節） */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* 色は画面設計書 2.2 節の表に従う。コントラストは実装時に計測して調整する */
+/*
+ * テーマトークンは shadcn/ui（neutral）の値を基準にし、本アプリ固有の
+ * --warning（今日が期限）と --success（すべて完了）を追加する（画面設計書 2.2 節）。
+ */
 :root {
-  --bg: #ffffff;
-  --bg-card: #f6f7f9;
-  --fg: #1a1d21;
-  --fg-muted: #5c6670;
-  --border: #d9dde2;
-  --accent: #2563eb;
-  --danger: #dc2626;
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
   --warning: #d97706;
   --success: #16a34a;
 }
 
-:root.dark {
-  --bg: #111418;
-  --bg-card: #1b2027;
-  --fg: #e6e8eb;
-  --fg-muted: #9aa4ae;
-  --border: #2c333c;
-  --accent: #60a5fa;
-  --danger: #f87171;
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
   --warning: #fbbf24;
   --success: #4ade80;
 }
 
-html {
-  background: var(--bg);
-  color: var(--fg);
-  font-family:
-    system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", sans-serif;
+/* Tailwind のクラス名（bg-background、text-muted-foreground など）にトークンを対応づける */
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    /* システムフォント。外部フォントは読み込まない（要件 NFR-07） */
+    font-family:
+      system-ui, -apple-system, "Segoe UI", Roboto, "Hiragino Sans", "Noto Sans JP", sans-serif;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
 }
