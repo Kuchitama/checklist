@@ -1,0 +1,7 @@
+# gitleaks の設定（docs/security.md）。既定のルール一式をそのまま使い、追跡しているファイルは除外しない。
+# 誤検知があれば、このファイルに [[allowlists]] を追加し、検出ごとの fingerprint
+# （<commit>:<path>:<rule>:<line>）か正規表現を理由つきで限定的に書く。空の allowlist は設定エラーになる。
+title = "checklist"
+
+[extend]
+useDefault = true
