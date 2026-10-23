@@ -25,7 +25,8 @@
 | 書く前 | CLAUDE.md 10 章の規則。PR を出す前の自己チェック項目 | 導入済み |
 | コミット時 | `.gitignore` で `.env*`、鍵ファイル、`.npmrc`、`.netrc` を除外 | 導入済み |
 | push 時 | GitHub の **Push protection**（公開リポジトリでは無料）。既知の形式のトークンを含む push を拒否する | リポジトリ設定 → Code security → Secret scanning → Push protection を有効にする（オーナーの操作） |
-| PR / 日次 | `secret-scan.yml`（gitleaks）。全履歴を対象に PR と push で実行し、毎日 1 回ルール更新分を再検査する | 導入済み。ブランチ保護で必須チェックにする（オーナーの操作） |
+| PR / push | `secret-scan.yml`（gitleaks）。PR と push では base から head までの**変更範囲**だけを検査する。過去のコミットは対象外 | 導入済み。ブランチ保護で必須チェックにする（オーナーの操作） |
+| 日次 | 同じワークフローの `schedule`（毎日 04:17 UTC）と手動実行（`workflow_dispatch`）では**全履歴**を最新の gitleaks ルールで検査する。ルール追加で過去の混入が見つかる可能性に備える | 導入済み |
 | 常時 | GitHub の **Secret scanning**（公開リポジトリでは無料）。GitHub 側で検出した既知のトークンを通知し、発行元に失効を依頼する | リポジトリ設定で有効にする（オーナーの操作） |
 | 身元 | コミットの author にはオーナー自身の GitHub アカウントのメールアドレスか GitHub の noreply アドレスだけを使う。第三者のアドレスを author / Co-Authored-By に書かない | 運用中 |
 
