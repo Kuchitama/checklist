@@ -24,7 +24,7 @@ GitHub Pages に静的配置し、GitHub Actions で自動デプロイする。
 | 言語 | TypeScript（strict） | 要件 NFR-09 |
 | ビルド | Vite | 高速、PWA プラグインが充実 |
 | UI | React 19 | 要件 NFR-09。情報量が多く、周辺ライブラリが揃う |
-| ルーティング | react-router（HashRouter） | GitHub Pages ではパスベースのルーティングが 404 になるため hash 方式を採る |
+| ルーティング | react-router（`createHashRouter` + `RouterProvider`） | GitHub Pages ではパスベースのルーティングが 404 になるため hash 方式を採る。編集中の離脱確認に使う `useBlocker` はデータルーター専用のため、`<HashRouter>` ではなく `createHashRouter` で構成する |
 | 状態・永続化 | Dexie + dexie-react-hooks | IndexedDB を型付きで扱える。`useLiveQuery` で DB 変更が UI に自動反映される |
 | スタイル | Tailwind CSS | レスポンシブとダークモード（`dark:` バリアント）を少ない記述で実現 |
 | ドラッグ並び替え | @dnd-kit/core + @dnd-kit/sortable | タッチ対応、キーボード操作対応、軽量 |
@@ -64,7 +64,7 @@ export type Checklist = {
   title: string;         // 1〜100 文字、必須
   description: string;   // 0〜1000 文字。空文字可
   tags: string[];        // 各 1〜30 文字。重複なし。最大 20 個
-  items: ChecklistItem[];// 配列の順序 = 表示順
+  items: ChecklistItem[];// 配列の順序 = 表示順。最大 500 件
   createdAt: string;     // ISO 8601（UTC）
   updatedAt: string;     // ISO 8601（UTC）。項目のチェックでも更新する
 };
@@ -73,7 +73,7 @@ export type ChecklistItem = {
   id: string;            // UUID v4。リスト内で一意
   title: string;         // 1〜200 文字、必須
   note: string;          // 0〜2000 文字。複数行可。空文字可
-  url: string | null;    // http(s) のみ許可
+  url: string | null;    // http(s) のみ許可。最大 2000 文字
   dueDate: string | null;// "YYYY-MM-DD"（ローカル日付として解釈）
   checked: boolean;
   checkedAt: string | null; // ISO 8601。checked が false のとき必ず null
@@ -133,7 +133,7 @@ db.version(1).stores({
 
 ### 4.3 読み込みルール（FR-32〜34）
 
-1. JSON として解析できなければ「JSON ファイルとして読めません」と表示して中断。
+1. ファイルサイズが 20 MB（20,000,000 バイト）を超えていれば「このアプリの書き出しファイルではありません」と表示して中断。上限は、各フィールドが上限いっぱいのリストを書き出した場合の理論最大（約 13 MB）に余裕を持たせた値。JSON として解析できなければ「JSON ファイルとして読めません」と表示して中断。
 2. zod スキーマで検証する。`format` が `checklist-export` でない、または `version` が未対応なら「このアプリの書き出しファイルではありません」と表示して中断。項目の必須違反・文字数超過は該当箇所を示して中断。
 3. 検証に通ったらプレビュー（タイトル、タグ、項目一覧）を表示し、「取り込む」で確定する。
 4. 取り込み時に新しい `id` と各項目の `id` を採番し、`checked=false`、`checkedAt=null`、`createdAt=updatedAt=現在時刻` で保存する。
@@ -146,7 +146,7 @@ db.version(1).stores({
 
 ## 5. 画面仕様
 
-ルーティングは HashRouter（例: `https://<host>/checklist/#/lists/<id>`）。
+ルーティングは react-router の `createHashRouter`（データルーター。URL は hash 形式。例: `https://<host>/checklist/#/lists/<id>`）。
 
 | パス | 画面 |
 | --- | --- |
@@ -222,7 +222,7 @@ searchChecklists(query: string, tags: string[]): Promise<Checklist[]>
 clearAllData(): Promise<void>
 ```
 
-`ChecklistInput` は `Checklist` から `id / createdAt / updatedAt` を除き、項目から `checked / checkedAt` を省略可にした型。
+`ChecklistInput` は `title / description / tags / items` を持つ。項目（`ChecklistItemInput`）は `title / note / url / dueDate` と、既存項目にだけ付く省略可能な `id` を持ち、新規項目は `id` を持たない。`checked / checkedAt` は入力に含めず、`createChecklist` は `false / null` で作り、`updateChecklist` は既存項目から引き継ぐ。型の定義はデータ設計書 1.4 節、マージ規則は同 4.1 節。
 
 ## 7. PWA
 
@@ -250,7 +250,7 @@ clearAllData(): Promise<void>
 │       ├── ci.yml      # PR: pnpm verify（M5 以降は E2E も）
 │       └── deploy.yml  # main: build → GitHub Pages
 ├── CLAUDE.md           # エージェント向けの約束事（12.2 節）
-├── docs/               # 本仕様書と設計書
+├── docs/               # 本仕様書と設計書（docs/design/）
 ├── lefthook.yml        # pre-commit / pre-push フック
 ├── public/             # アイコン、manifest 用画像
 ├── src/
@@ -285,7 +285,7 @@ CI では単体テストを必須、E2E は Chromium のみ実行する。
   - Playwright は `playwright.config.ts` の `webServer` で `vite preview` を起動し、ビルド済み成果物に対して実行する。失敗時は `playwright-report` を `actions/upload-artifact` で保存する。
   - E2E 工程は M5 で追加する。それまでの CI は `vite build` までで終わる。
 - **deploy.yml**: `push` to `main` で `vite build --base=/checklist/` → `actions/upload-pages-artifact` → `actions/deploy-pages`。
-- `base` はリポジトリ名に合わせ `/checklist/` とし、HashRouter を使うため SPA フォールバックは不要。
+- `base` はリポジトリ名に合わせ `/checklist/` とし、hash 形式のルーティングを使うため SPA フォールバックは不要。
 
 ## 12. 開発計画（マイルストーン）
 
