@@ -29,9 +29,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && { [ -d node_modules ] || pnpm install --frozen-lockfile; }",
+            "command": "cd \"${CLAUDE_PROJECT_DIR:-.}\" && pnpm install --frozen-lockfile",
             "timeout": 300,
-            "statusMessage": "依存を確認しています（pnpm install --frozen-lockfile）"
+            "statusMessage": "依存をロックファイルに同期しています（pnpm install --frozen-lockfile）"
           }
         ]
       }
