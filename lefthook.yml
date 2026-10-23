@@ -1,0 +1,13 @@
+# Git フック（仕様書 12.2 節 H-3）。pnpm install 時の prepare スクリプトで有効になる。
+# 一時的に外したいときは環境変数 LEFTHOOK=0 を付ける（フックを飛ばすオプションは使わない。CLAUDE.md 8 章）。
+pre-commit:
+  commands:
+    biome:
+      glob: "*.{ts,tsx,js,jsx,mjs,json,css,html}"
+      run: pnpm exec biome check --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+
+pre-push:
+  commands:
+    verify:
+      run: pnpm verify
