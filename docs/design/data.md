@@ -324,7 +324,9 @@ export type ImportError =
 | `custom` で `params.code` がある | `params.code` の値（`too_long` / `invalid_url` / `invalid_date`） |
 | `too_small`（文字列。`.min(1)` 違反） | `required` |
 | `too_big`（配列。`.max(20)` / `.max(500)` 違反） | `too_many` |
-| `invalid_type`（`undefined` や `null` を含む型違い）、`invalid_literal`、`invalid_string`（`exportedAt` の datetime 違反）、`invalid_union`、上記以外 | `invalid_type` |
+| `invalid_type`（`undefined` や `null` を含む型違い）、`invalid_value`（`z.literal` 違反）、`invalid_format`（`exportedAt` の datetime 違反）、`invalid_union`、上記以外 | `invalid_type` |
+
+issue の `code` は zod 4 の名前で書く（zod 3 の `invalid_literal` / `invalid_string` は、zod 4 で `invalid_value` / `invalid_format` になった。2026-10-23 確認: zod 4.6.7 の実際の出力）。
 
 **path**: zod の `path` をそのまま使う（例 `["checklist", "items", 0, "url"]`）。
 
