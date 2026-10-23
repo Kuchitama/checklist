@@ -163,7 +163,7 @@ db.version(1).stores({
 | `listChecklists()` | なし | なし | なし | 変更なし | DB 読み取り失敗 |
 | `getChecklist(id)` | `id` | なし | なし | 変更なし | 見つからなければ `undefined`（例外にしない） |
 | `createChecklist(input)` | `ChecklistInput` | 正規化・検証を通過 | 新規 `id`、各項目に新規 `id`、`checked=false`、`checkedAt=null`、`createdAt=updatedAt=now()` | `now()` | 検証エラー（`ValidationIssue[]`）、DB 書き込み失敗 |
-| `updateChecklist(id, input)` | `id`、`ChecklistInput` | リストが存在。正規化・検証を通過 | `title`/`description`/`tags` を置換。`items` は 4.1 節のマージ規則で置換。`createdAt` は保持 | `now()` | 見つからない（`NotFoundError`）、検証エラー、DB 書き込み失敗 |
+| `updateChecklist(id, input)` | `id`、`ChecklistInput` | リストが存在。正規化・検証を通過 | `title`/`description`/`tags` を置換。`items` は 4.1 節のマージ規則で置換。`createdAt` は保持 | `now()` | 見つからない（`ChecklistNotFoundError`）、検証エラー、DB 書き込み失敗 |
 | `deleteChecklist(id)` | `id` | なし | 該当ドキュメントを削除 | なし | 見つからなくても成功扱い（冪等） |
 | `duplicateChecklist(id)` | `id` | リストが存在 | 新規 `id`、タイトルは 4.2 節の規則、`description`/`tags` をコピー、各項目は新規 `id` で `checked=false`、`checkedAt=null`、`createdAt=updatedAt=now()` | `now()` | 見つからない、DB 書き込み失敗 |
 | `toggleItem(listId, itemId, checked)` | `listId`、`itemId`、`checked` | リストと項目が存在 | 該当項目の `checked` を引数の値に、`checkedAt` を `checked ? now() : null` に | `now()` | 見つからない、DB 書き込み失敗 |
@@ -173,6 +173,8 @@ db.version(1).stores({
 | `importChecklist(file)` | `ExportFile` | `parseImportFile` を通過 | `createChecklist` と同じ | `now()` | 検証エラー、DB 書き込み失敗 |
 | `searchChecklists(query, tags)` | 検索語、タグ配列 | なし | なし | 変更なし | DB 読み取り失敗 |
 | `clearAllData()` | なし | なし | `checklists` を全削除し、`localStorage` の `checklist.settings` を削除 | なし | DB 書き込み失敗 |
+
+失敗の例外は `src/domain/errors.ts` に置く。「見つからない」は `ChecklistNotFoundError`、検証エラーは `ChecklistValidationError`（`issues: ValidationIssue[]`）。DB の例外はそのまま投げる。`NotFoundError` という名前は使わない。Dexie がトランザクション内で投げられた例外を名前で判定し、IndexedDB の同名の例外とみなして `DexieError` に包み直すため（2026-10-23 確認: Dexie 4.4.6 の実際の挙動）。
 
 ### 4.1 `updateChecklist` の項目マージ規則
 
