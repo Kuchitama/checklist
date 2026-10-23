@@ -1,0 +1,13 @@
+# gitleaks の設定（docs/security.md）。既定のルール一式を使い、生成物だけ対象から外す。
+title = "checklist"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "機械生成ファイルと、秘密情報を含まないことが構造上明らかなもの"
+paths = [
+  '''pnpm-lock\.yaml$''',
+  '''^dist/''',
+  '''^node_modules/''',
+]
