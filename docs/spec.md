@@ -37,7 +37,7 @@ GitHub Pages に静的配置し、GitHub Actions で自動デプロイする。
 | CI / CD | GitHub Actions | PR で lint・型検査・テスト・ビルド。main で Pages へデプロイ |
 | パッケージ管理 | pnpm（10.16 以上） | ロックファイルを CI で固定。`minimumReleaseAge` による cooldown を使う（2.1 節） |
 
-Node.js は **26**（2026-10-28 に Active LTS 入り。Node 22 / 24 は既に Maintenance）を前提とし、`.node-version` と `package.json` の `engines` で `26` に固定する。CI も同じファイルを参照する。
+Node.js は **26**（2026-10-28 に Active LTS 入り。Node 22 / 24 は既に Maintenance）を前提とする。`.node-version` には nodenv や fnm がそのまま解釈できるよう完全なバージョン（例 `26.12.1`）を書き、`package.json` の `engines` は `>=26` とする。CI（`actions/setup-node`）も `.node-version` を参照する。パッチバージョンの更新は Renovate / Dependabot の PR で追う。
 
 M0 時点で採用したバージョン（2026-10-23 確認: npm レジストリの `latest`。以後の更新は Renovate / Dependabot の PR で追う）:
 

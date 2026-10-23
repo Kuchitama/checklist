@@ -23,7 +23,7 @@
 
 - **言語**: 文書、コミットメッセージ、PR、UI 文言、コード内コメントはすべて日本語。識別子は英語。
 - **パッケージマネージャ**: pnpm のみ。`npm` / `yarn` / `npx` を使わない。`pnpm-workspace.yaml` の `minimumReleaseAge: 1440`（24 時間の cooldown）を除外設定で回避しない。
-- **Node.js**: 26。`.node-version` と `package.json` の `engines` に従う。
+- **Node.js**: 26。`.node-version`（完全なバージョン番号。nodenv / fnm がそのまま使う）と `package.json` の `engines` に従う。
 - **技術スタック**: 仕様書 2 章に従う。ライブラリを追加・置換するときは仕様書 2 章を先に更新し、理由を PR に書く。
 - **配布**: GitHub Pages への静的配置。サーバーサイド処理や外部通信を前提にしない。
 - **ブランチ**: `main` へ直接コミットしない。`main` から `docs/…`、`feat/…`、`fix/…` のように目的を表す名前で分岐し、PR で取り込む。
