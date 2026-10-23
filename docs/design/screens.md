@@ -72,7 +72,7 @@ flowchart LR
 
 ### 2.2 テーマと色
 
-CSS 変数で定義し、Tailwind の `darkMode: 'class'` で切り替える。
+CSS 変数で定義し、Tailwind v4 の `@custom-variant dark (&:where(.dark, .dark *))` と `html.dark` クラスで切り替える（仕様書 8 章）。
 
 | 変数 | 用途 | ライト | ダーク |
 | --- | --- | --- | --- |
