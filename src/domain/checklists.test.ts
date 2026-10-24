@@ -217,7 +217,7 @@ describe("toggleItem / resetChecklist / deleteChecklist", () => {
   );
 
   it("リセットで全項目が未完了になり、項目の数・順序・内容は変わらない", async () => {
-    await toggleItem("list", "a", true);
+    // beforeEach の項目 b はチェック済み、updatedAt は過去の時刻
     const original = await stored();
 
     await resetChecklist("list");
