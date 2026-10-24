@@ -20,8 +20,9 @@ export function ChecklistCard({ checklist }: { checklist: Checklist }) {
       {checklist.tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {shownTags.map((tag) => (
-            <Badge key={tag} variant="secondary">
-              {tag}
+            // 長いタグ（最大 30 文字）でもカード幅を超えないよう、幅を親に収めて溢れは … にする
+            <Badge key={tag} variant="secondary" className="max-w-full">
+              <span className="truncate">{tag}</span>
             </Badge>
           ))}
           {hiddenTags > 0 && <Badge variant="outline">{`+${hiddenTags}`}</Badge>}
