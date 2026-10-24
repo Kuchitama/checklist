@@ -9,8 +9,13 @@ export function renderWithRouter(ui: ReactElement) {
   return { router, ...render(<RouterProvider router={router} />) };
 }
 
-/** アプリのルート定義をそのまま使い、path の画面を描画する */
-export function renderApp(path = "/") {
-  const router = createMemoryRouter(routes, { initialEntries: [path] });
+/**
+ * アプリのルート定義をそのまま使い、path の画面を描画する。
+ * 配列を渡すと履歴として積み、最後の要素の画面を開く（ブラウザの戻るを試すため）
+ */
+export function renderApp(path: string | string[] = "/") {
+  const router = createMemoryRouter(routes, {
+    initialEntries: Array.isArray(path) ? path : [path],
+  });
   return { router, ...render(<RouterProvider router={router} />) };
 }
