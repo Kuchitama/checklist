@@ -9,4 +9,15 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "チェックリスト" })).toBeInTheDocument();
     expect(screen.queryByText("問題が発生しました")).not.toBeInTheDocument();
   });
+
+  // 中身は #18（新規作成）と #19（詳細）で作る。ここではルートがあり、エラー画面にならないことだけを確かめる
+  it.each([
+    ["/lists/new", "新規作成"],
+    ["/lists/example-id", "チェックリスト"],
+  ])("%s のルートがあり、エラー画面にならない", async (path, title) => {
+    renderApp(path);
+    expect(await screen.findByRole("heading", { name: title })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "戻る" })).toHaveAttribute("href", "/");
+    expect(screen.queryByText("問題が発生しました")).not.toBeInTheDocument();
+  });
 });

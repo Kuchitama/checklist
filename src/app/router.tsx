@@ -1,4 +1,6 @@
 import { createHashRouter, type RouteObject } from "react-router";
+import { ListDetail } from "@/pages/ListDetail/ListDetail";
+import { ListEdit } from "@/pages/ListEdit/ListEdit";
 import { ListIndex } from "@/pages/ListIndex/ListIndex";
 import { App } from "./App";
 import { RootError } from "./RootError";
@@ -9,7 +11,12 @@ export const routes: RouteObject[] = [
     path: "/",
     element: <App />,
     errorElement: <RootError />,
-    children: [{ index: true, element: <ListIndex /> }],
+    children: [
+      { index: true, element: <ListIndex /> },
+      // lists/new は lists/:id より具体的なので、並び順によらず先に一致する
+      { path: "lists/new", element: <ListEdit /> },
+      { path: "lists/:id", element: <ListDetail /> },
+    ],
   },
 ];
 
