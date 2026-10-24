@@ -1,8 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
-import { makeChecklist, makeChecklistInput } from "@/test/fixtures";
-import { createChecklist, getChecklist, listChecklists } from "./checklists";
-import { ChecklistValidationError } from "./errors";
+import { makeChecklist, makeChecklistInput, makeItem } from "@/test/fixtures";
+import {
+  createChecklist,
+  deleteChecklist,
+  getChecklist,
+  listChecklists,
+  resetChecklist,
+  toggleItem,
+} from "./checklists";
+import { ChecklistNotFoundError, ChecklistValidationError } from "./errors";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -127,5 +134,109 @@ describe("getChecklist", () => {
 
   it("存在しなければ undefined を返す", async () => {
     expect(await getChecklist("missing")).toBeUndefined();
+  });
+});
+
+describe("toggleItem / resetChecklist / deleteChecklist", () => {
+  const before = "2026-10-01T00:00:00.000Z";
+  const doneAt = "2026-10-02T00:00:00.000Z";
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-23T01:02:03.004Z"));
+    await db.checklists.put(
+      makeChecklist({
+        id: "list",
+        updatedAt: before,
+        items: [
+          makeItem({ id: "a", title: "パスポート" }),
+          makeItem({ id: "b", title: "充電器", checked: true, checkedAt: doneAt }),
+          makeItem({ id: "c", title: "傘" }),
+        ],
+      }),
+    );
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await db.checklists.clear();
+  });
+
+  const stored = async () => {
+    const list = await db.checklists.get("list");
+    if (!list) throw new Error("リストがない");
+    return list;
+  };
+
+  it("チェックすると checkedAt と updatedAt が現在時刻になり、ほかの項目は変わらない", async () => {
+    const original = await stored();
+
+    await toggleItem("list", "a", true);
+
+    const list = await stored();
+    expect(list.items[0]).toEqual({
+      ...original.items[0],
+      checked: true,
+      checkedAt: "2026-10-23T01:02:03.004Z",
+    });
+    expect(list.items.slice(1)).toEqual(original.items.slice(1));
+    expect(list.updatedAt).toBe("2026-10-23T01:02:03.004Z");
+  });
+
+  it("チェックを外すと checkedAt が null になり、updatedAt が更新される", async () => {
+    await toggleItem("list", "b", false);
+
+    const list = await stored();
+    expect(list.items[1]).toMatchObject({ checked: false, checkedAt: null });
+    expect(list.updatedAt).toBe("2026-10-23T01:02:03.004Z");
+  });
+
+  it("別の項目を並行にチェックしても、どちらの更新も失われない", async () => {
+    await Promise.all([toggleItem("list", "a", true), toggleItem("list", "c", true)]);
+
+    expect((await stored()).items.map((i) => i.checked)).toEqual([true, true, true]);
+  });
+
+  it("同じ項目を true → false と続けて呼ぶと、最後の呼び出しの値になる", async () => {
+    await Promise.all([toggleItem("list", "a", true), toggleItem("list", "a", false)]);
+
+    expect((await stored()).items[0]).toMatchObject({ checked: false, checkedAt: null });
+  });
+
+  it.each([
+    ["リスト", "missing", "a"],
+    ["項目", "list", "missing"],
+  ])(
+    "%sが存在しなければ ChecklistNotFoundError を投げ、何も書き込まない",
+    async (_, listId, itemId) => {
+      const original = await stored();
+
+      await expect(toggleItem(listId, itemId, true)).rejects.toBeInstanceOf(ChecklistNotFoundError);
+      expect(await stored()).toEqual(original);
+    },
+  );
+
+  it("リセットで全項目が未完了になり、項目の数・順序・内容は変わらない", async () => {
+    // beforeEach の項目 b はチェック済み、updatedAt は過去の時刻
+    const original = await stored();
+
+    await resetChecklist("list");
+
+    const list = await stored();
+    expect(list.items).toEqual(
+      original.items.map((i) => ({ ...i, checked: false, checkedAt: null })),
+    );
+    expect(list.updatedAt).toBe("2026-10-23T01:02:03.004Z");
+  });
+
+  it("存在しないリストのリセットは ChecklistNotFoundError を投げる", async () => {
+    await expect(resetChecklist("missing")).rejects.toBeInstanceOf(ChecklistNotFoundError);
+  });
+
+  it("削除するとリストが消える。存在しない id でも成功する", async () => {
+    await deleteChecklist("list");
+    expect(await db.checklists.get("list")).toBeUndefined();
+
+    await expect(deleteChecklist("list")).resolves.toBeUndefined();
   });
 });

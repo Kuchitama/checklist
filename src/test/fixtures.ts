@@ -1,4 +1,4 @@
-import type { Checklist, ChecklistInput } from "@/domain/types";
+import type { Checklist, ChecklistInput, ChecklistItem } from "@/domain/types";
 
 /** テスト用のリストを作る。内容は架空（CLAUDE.md 10 章） */
 export function makeChecklist(overrides: Partial<Checklist> & Pick<Checklist, "id">): Checklist {
@@ -9,6 +9,21 @@ export function makeChecklist(overrides: Partial<Checklist> & Pick<Checklist, "i
     items: [],
     createdAt: "2026-10-01T00:00:00.000Z",
     updatedAt: "2026-10-01T00:00:00.000Z",
+    ...overrides,
+  };
+}
+
+/** テスト用の項目を作る */
+export function makeItem(
+  overrides: Partial<ChecklistItem> & Pick<ChecklistItem, "id">,
+): ChecklistItem {
+  return {
+    title: "テスト用項目",
+    note: "",
+    url: null,
+    dueDate: null,
+    checked: false,
+    checkedAt: null,
     ...overrides,
   };
 }
