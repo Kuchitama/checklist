@@ -1,7 +1,7 @@
 # ハーネス（開発ループの土台）
 
 - 作成日: 2026-10-23
-- ステータス: 確定（2026-10-23 レビュー完了）
+- ステータス: 確定（2026-10-24 レビュー完了）
 - 関連文書: [仕様書](./spec.md)（12.2 節）、[CLAUDE.md](../CLAUDE.md)、[秘密情報の取り扱い](./security.md)
 
 仕様書 12.2 節のハーネス構築フェーズ（H）で整えた仕組みと、その運用規則をまとめる。目的は、エージェントが「計画 → 実装 → 検証 → 修正」を人の介在なしに回し、人は PR だけを見ればよい状態にすること。
@@ -17,7 +17,7 @@
 | H-3 権限 | pnpm、node、git の日常操作、読み取り系コマンドを事前承認し、確認待ちで止まらないようにする | `.claude/settings.json` | H |
 | H-4 作業単位 | Issue テンプレート（目的・受け入れ基準・対象外・関連する仕様の節）、PR テンプレート（対応 Issue・変更内容・検証・レビュー点） | `.github/ISSUE_TEMPLATE/`、`.github/pull_request_template.md` | H |
 | H-4 自動レビュー | Copilot のコードレビューを PR 作成時に自動実行。指摘への対応はエージェントのループに含める | リポジトリ設定 | 導入済み |
-| H-4 ブランチ保護 | main への直接 push 禁止。`verify` と `gitleaks` を必須チェックにする | リポジトリ設定（オーナーの操作） | 要設定（Issue #12） |
+| H-4 ブランチ保護 | main への直接 push 禁止。`verify` と `gitleaks` を必須チェックにする | リポジトリ設定（オーナーの操作）。Rulesets の `main` | 導入済み（2026-10-24、Issue #12） |
 | 依存更新 | Dependabot が週 1 回、1 日の cooldown を置いて npm と GitHub Actions の更新 PR を出す | `.github/dependabot.yml` | H |
 | 秘密情報 | gitleaks の CI と `.gitignore` | `docs/security.md` | 導入済み |
 
@@ -52,7 +52,7 @@
 | --- | --- |
 | クリーンな環境で `pnpm install --frozen-lockfile && pnpm verify` が通る | CI で毎回確認。M0 で達成 |
 | `CLAUDE.md`、Issue / PR テンプレート、lefthook、`.claude/settings.json` がそろっている | 本フェーズで達成 |
-| ブランチ保護が有効で、CI 緑と自動レビューの解決が必須になっている | オーナーの操作待ち（Issue #12）。例外として M1 に進む（4.2 節） |
+| ブランチ保護が有効で、CI 緑と自動レビューの解決が必須になっている | 達成（2026-10-24、Issue #12。4.3 節） |
 | M1 の一部を Issue 化し、エージェントが人の操作なしに PR を作り、`pnpm verify` と自動レビューを通せる | 達成（Issue #8、PR #11。4.1 節） |
 
 ### 4.1 実地試験の記録（Issue #8 / PR #11、2026-10-23）
@@ -78,6 +78,21 @@
 - **理由**: 残りはリポジトリ設定の操作だけで、エージェントのループ（条件 1・2・4）は動いている。待つあいだ M1 を止める利点が小さい。
 - **保護がないあいだの代替**: main へ直接コミットしない規則（CLAUDE.md 3 章）、`guard-bash` による main への force push の拒否、pre-push の `pnpm verify`、PR 上の CI（`verify`、`gitleaks`）と Copilot レビュー、マージはオーナーの指示があったときだけ行う規則（CLAUDE.md 8 章）。CI が赤の PR はマージしない。
 - **解除**: Issue #12 が完了したら、1 章と 4 章の表を「導入済み」に更新し、この節は記録として残す。
+- **解除済み（2026-10-24）**: Issue #12 の完了で例外を解除した（4.3 節）。
+
+### 4.3 ブランチ保護の設定（2026-10-24 確認）
+
+リポジトリ設定の Rulesets にある `main` で設定した。GitHub の API（`/repos/{owner}/{repo}/rules/branches/main`）で、main に効いていることを確認した。
+
+| 設定 | 内容 |
+| --- | --- |
+| 対象 | デフォルトブランチ（`main`） |
+| PR 必須 | main へは PR 経由でしかマージできない。承認数は 0（個人リポジトリでは自分の PR を承認できないため） |
+| 必須チェック | `verify`（CI）と `gitleaks`（Secret scan） |
+| force push・削除 | 禁止 |
+| 例外（bypass） | なし |
+
+- **自動レビューの解決**: 「Require conversation resolution before merging」はオンにしていない（オーナーの判断）。Copilot の指摘は、エージェントが対応してから解決済みにする運用（CLAUDE.md 6 章）で扱う。人のコメントは人が解決する。
 
 ## 5. 既知の制約
 
