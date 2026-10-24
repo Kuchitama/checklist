@@ -1,3 +1,4 @@
+import { AppShell } from "@/components/AppShell";
 import { ErrorState } from "@/components/ErrorState";
 
 /**
@@ -6,13 +7,12 @@ import { ErrorState } from "@/components/ErrorState";
  */
 export function RootError() {
   return (
-    <main className="mx-auto max-w-[720px] px-4 py-6">
-      <h1 className="mb-4 text-xl font-bold">チェックリスト</h1>
+    <AppShell>
       <ErrorState
         title="問題が発生しました"
         description="再読み込みしてください。"
         onRetry={() => window.location.reload()}
       />
-    </main>
+    </AppShell>
   );
 }

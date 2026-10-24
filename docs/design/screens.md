@@ -82,11 +82,12 @@ shadcn/ui のテーマトークンを CSS 変数として `src/index.css` に定
 | `--border` / `--input` / `--ring` | 罫線 / 入力欄の枠 / フォーカスリング | shadcn 標準 |
 | `--primary` / `--primary-foreground` | 主ボタン、チェック済み、進捗バー | shadcn 標準 |
 | `--destructive` | 削除、期限超過 | shadcn 標準 |
-| `--warning` | 今日が期限 | 本アプリで追加。ライト `#d97706`、ダーク `#fbbf24` |
-| `--success` | すべて完了 | 本アプリで追加。ライト `#16a34a`、ダーク `#4ade80` |
+| `--warning` | 今日が期限 | 本アプリで追加。ライト `#b45309`、ダーク `#fbbf24`（ライトは当初 `#d97706` だったが、白の背景で 3.19:1 だったため調整した） |
+| `--success` | すべて完了 | 本アプリで追加。ライト `#15803d`、ダーク `#4ade80`（ライトは当初 `#16a34a` だったが、白の背景で 3.30:1 だったため調整した） |
 
 - 本文と背景のコントラスト比は両テーマで 4.5:1 以上。`--muted-foreground` も 4.5:1 以上を満たす値を選ぶ。
 - 実装時に生成された値でコントラストを計測し、満たさなければ値を調整して本表に追記する。
+- `--warning` / `--success` の計測値（2026-10-24、WCAG 2 の相対輝度で計算）: ライトは `--card`（白）で 5.02:1、カードのホバー時の `--accent` で 4.60:1。ダークは `--card` で `--warning` 10.73:1、`--success` 10.28:1。
 - Tailwind のクラスでは `bg-background`、`text-muted-foreground`、`bg-primary`、`text-destructive` のように shadcn が `@theme inline` で定義した名前で参照する。`--warning` / `--success` も同じ仕組みで `text-warning`、`bg-success` として使えるよう `@theme inline` に登録する。
 
 ### 2.3 文字サイズ
