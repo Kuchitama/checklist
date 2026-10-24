@@ -103,7 +103,7 @@ describe("validateChecklistInput", () => {
     expect(validateChecklistInput(makeChecklistInput({ items }))).toEqual([]);
   });
 
-  it.each(["2026-02-30", "2026-13-01", "2026/10/20", "20261020"])(
+  it.each(["2026-02-30", "2026-13-01", "2026/10/20", "20261020", "0003-02-29", "0100-02-29"])(
     "存在しない日付や形式違い（%s）を invalid_date で拒否する",
     (dueDate) => {
       expect(validateChecklistInput(makeChecklistInput({ items: [item({ dueDate })] }))).toEqual([
@@ -121,6 +121,16 @@ describe("validateChecklistInput", () => {
       validateChecklistInput(makeChecklistInput({ items: [item({ dueDate: "2028-02-29" })] })),
     ).toEqual([]);
   });
+
+  // Date.UTC は 0〜99 年を 1900 年代とみなすので、その範囲でも正しく判定できることを確かめる
+  it.each(["0099-01-01", "0004-02-29", "0000-01-01"])(
+    "西暦 100 年未満の日付（%s）を通す",
+    (dueDate) => {
+      expect(validateChecklistInput(makeChecklistInput({ items: [item({ dueDate })] }))).toEqual(
+        [],
+      );
+    },
+  );
 
   it("型が違う値は汎用の文言で invalid_type にする", () => {
     const input = { ...makeChecklistInput(), title: 1 } as unknown as Parameters<

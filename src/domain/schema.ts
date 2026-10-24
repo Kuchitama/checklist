@@ -30,7 +30,9 @@ const isoDate = (s: string, ctx: z.RefinementCtx) => {
   let ok = false;
   if (m) {
     const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-    const dt = new Date(Date.UTC(y, mo - 1, d));
+    // Date.UTC は 0〜99 年を 1900 年代とみなすので、setUTCFullYear で年をそのまま設定する
+    const dt = new Date(0);
+    dt.setUTCFullYear(y, mo - 1, d);
     ok = dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
   }
   if (!ok) ctx.addIssue({ code: "custom", params: { code: "invalid_date" } });
