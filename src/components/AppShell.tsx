@@ -30,7 +30,12 @@ export function AppShell({ title, backTo, actions, children }: Props) {
             </Button>
           )}
           <h1 className="min-w-0 flex-1 truncate text-xl font-bold">
-            {title ?? <Link to="/">チェックリスト</Link>}
+            {title ?? (
+              // タップ領域を 44px 以上にする（画面設計書 2.1 節）
+              <Link to="/" className="inline-flex h-11 items-center">
+                チェックリスト
+              </Link>
+            )}
           </h1>
           {actions}
         </div>
