@@ -45,4 +45,12 @@ describe("exportFileName（データ設計書 5.4 節）", () => {
     );
     expect(exportFileName("a", new Date(2026, 2, 5, 0, 0, 0))).toBe("checklist-a-20260305.json");
   });
+
+  it("西暦 1000 年未満でも年を 4 桁にそろえる（Date の 0〜99 年は setFullYear で作る）", () => {
+    const year99 = new Date(2000, 0, 2);
+    year99.setFullYear(99);
+    expect(exportFileName("a", year99)).toBe("checklist-a-00990102.json");
+    const year999 = new Date(999, 11, 31);
+    expect(exportFileName("a", year999)).toBe("checklist-a-09991231.json");
+  });
 });

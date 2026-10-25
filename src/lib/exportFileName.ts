@@ -2,7 +2,7 @@
  * 書き出しファイル名（データ設計書 5.4 節）: `checklist-<safeTitle>-<YYYYMMDD>.json`。
  * 日付は端末のローカル日付。
  */
-const pad2 = (n: number) => String(n).padStart(2, "0");
+const pad = (n: number, width: number) => String(n).padStart(width, "0");
 
 /** ファイル名に使えない文字（\ / : * ? " < > |）と制御文字（U+0000〜U+001F、U+007F） */
 // biome-ignore lint/suspicious/noControlCharactersInRegex: 制御文字を置換対象にするのが目的
@@ -19,6 +19,7 @@ export function safeFileTitle(title: string): string {
 }
 
 export function exportFileName(title: string, date: Date = new Date()): string {
-  const ymd = `${date.getFullYear()}${pad2(date.getMonth() + 1)}${pad2(date.getDate())}`;
+  // 年も 4 桁にそろえる（西暦 1000 年未満の Date でも YYYYMMDD の形を保つ）
+  const ymd = `${pad(date.getFullYear(), 4)}${pad(date.getMonth() + 1, 2)}${pad(date.getDate(), 2)}`;
   return `checklist-${safeFileTitle(title)}-${ymd}.json`;
 }
