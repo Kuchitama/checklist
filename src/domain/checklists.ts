@@ -182,3 +182,12 @@ export async function exportChecklist(id: string): Promise<ExportFile> {
 export function serializeExportFile(file: ExportFile): string {
   return `${JSON.stringify(file, null, 2)}\n`;
 }
+
+/**
+ * 解析済みの読み込みファイルを新しいリストとして保存する（仕様書 4.3 節、FR-32〜34）。
+ * 新しい id と項目の id を採番し、checked=false、checkedAt=null、createdAt=updatedAt=現在時刻にする。
+ * 同名のリストがあっても上書きせず、常に新規に追加する。正規化・検証は createChecklist と同じ。
+ */
+export async function importChecklist(file: ExportFile): Promise<Checklist> {
+  return createChecklist(file.checklist);
+}

@@ -1,0 +1,24 @@
+{
+  "format": "checklist-export",
+  "version": 1,
+  "exportedAt": "2026-10-18T03:00:00.000Z",
+  "checklist": {
+    "title": "リリース手順",
+    "description": "本番リリース前に必ず通す確認",
+    "tags": ["仕事", "リリース"],
+    "items": [
+      {
+        "title": "CI が緑であることを確認",
+        "note": "",
+        "url": "https://example.com/ci",
+        "dueDate": null
+      },
+      {
+        "title": "リリースノートを書く",
+        "note": "前回との差分を箇条書き",
+        "url": null,
+        "dueDate": null
+      }
+    ]
+  }
+}

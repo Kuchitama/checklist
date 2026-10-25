@@ -1,0 +1,9 @@
+{
+  "format": "checklist-export",
+  "version": 1,
+  "exportedAt": "2026-10-18T03:00:00.000Z",
+  "checklist": {
+    "title": "最小のリスト",
+    "items": [{ "title": "項目だけ" }]
+  }
+}
