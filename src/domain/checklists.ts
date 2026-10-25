@@ -6,7 +6,13 @@ import { db } from "@/db";
 import { ChecklistNotFoundError, ChecklistValidationError } from "./errors";
 import { normalizeChecklistInput } from "./normalize";
 import { messageFor, validateChecklistInput } from "./schema";
-import type { Checklist, ChecklistInput, ChecklistItem, ValidationIssue } from "./types";
+import type {
+  Checklist,
+  ChecklistInput,
+  ChecklistItem,
+  ExportFile,
+  ValidationIssue,
+} from "./types";
 
 const now = () => new Date().toISOString();
 
@@ -145,4 +151,34 @@ export async function resetChecklist(id: string): Promise<void> {
 /** リストを削除する。存在しなくても成功扱い（冪等） */
 export async function deleteChecklist(id: string): Promise<void> {
   await db.checklists.delete(id);
+}
+
+/**
+ * リストを書き出しファイルの形にする（仕様書 4 章、データ設計書 5.1 節）。
+ * id・createdAt・updatedAt・checked・checkedAt と項目の id は含めない（FR-31）。項目の順序はそのまま。
+ */
+export async function exportChecklist(id: string): Promise<ExportFile> {
+  const checklist = await db.checklists.get(id);
+  if (!checklist) throw new ChecklistNotFoundError(`リストがありません: ${id}`);
+  return {
+    format: "checklist-export",
+    version: 1,
+    exportedAt: now(),
+    checklist: {
+      title: checklist.title,
+      description: checklist.description,
+      tags: checklist.tags,
+      items: checklist.items.map((item) => ({
+        title: item.title,
+        note: item.note,
+        url: item.url,
+        dueDate: item.dueDate,
+      })),
+    },
+  };
+}
+
+/** 書き出しファイルの文字列。2 スペース整形（データ設計書 5.3 節の上限の根拠はこの整形を前提にしている）、末尾に改行 */
+export function serializeExportFile(file: ExportFile): string {
+  return `${JSON.stringify(file, null, 2)}\n`;
 }
