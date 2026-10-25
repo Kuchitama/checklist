@@ -8,8 +8,8 @@ import {
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 
 /**
- * テーマは next-themes ではなく本アプリの ThemeProvider（画面設計書 7.3 節）から
- * props で受け取る。M5 で ThemeProvider を実装するまでは既定の "system" に従う。
+ * テーマは next-themes ではなく本アプリの ThemeProvider（画面設計書 7.3 節）の実効テーマを
+ * App から props で受け取る（light / dark）。
  */
 const Toaster = ({ theme = "system", ...props }: ToasterProps) => {
   return (

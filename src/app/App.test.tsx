@@ -1,5 +1,7 @@
-import { screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, screen } from "@testing-library/react";
+import { toast } from "sonner";
+import { afterEach, describe, expect, it } from "vitest";
+import { SETTINGS_KEY } from "@/domain/settings";
 import { renderApp } from "@/test/render";
 
 describe("App", () => {
@@ -20,5 +22,26 @@ describe("App", () => {
     expect(await screen.findByRole("heading", { name: title })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "戻る" })).toHaveAttribute("href", backTo);
     expect(screen.queryByText("問題が発生しました")).not.toBeInTheDocument();
+  });
+});
+
+describe("App のトースト領域", () => {
+  afterEach(() => {
+    localStorage.clear();
+    document.documentElement.classList.remove("dark");
+  });
+
+  it("トーストの配色が設定のテーマに従う", async () => {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ version: 1, theme: "dark" }));
+    renderApp("/");
+    await screen.findByText("まだチェックリストがありません");
+    act(() => {
+      toast("テスト");
+    });
+    expect(await screen.findByText("テスト")).toBeInTheDocument();
+    expect(document.querySelector("[data-sonner-toaster]")).toHaveAttribute(
+      "data-sonner-theme",
+      "dark",
+    );
   });
 });
