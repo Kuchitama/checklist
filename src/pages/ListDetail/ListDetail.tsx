@@ -142,7 +142,8 @@ function ChecklistView({ checklist }: { checklist: Checklist }) {
   return (
     <div className="flex flex-col gap-4">
       {checklist.description !== "" && (
-        <p data-testid="description" className="whitespace-pre-wrap">
+        // 空白のない長い文字列（URL など）も途中で折り返し、横スクロールを出さない
+        <p data-testid="description" className="whitespace-pre-wrap wrap-anywhere">
           {checklist.description}
         </p>
       )}
