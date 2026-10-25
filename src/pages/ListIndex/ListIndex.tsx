@@ -1,5 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { Plus } from "lucide-react";
+import { FileUp, Plus } from "lucide-react";
 import { Link } from "react-router";
 import { AppShell } from "@/components/AppShell";
 import { ChecklistCard } from "@/components/ChecklistCard";
@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { listChecklists } from "@/domain/checklists";
 
 /**
- * 一覧画面（画面設計書 3.1 節）。検索・タグ絞り込み（M4）と読み込み（M3）は後続のマイルストーンで追加する。
+ * 一覧画面（画面設計書 3.1 節）。検索・タグ絞り込みは M4 で追加する。
  */
 export function ListIndex() {
   return (
@@ -32,6 +32,18 @@ function NewChecklistButton({ className }: { className?: string }) {
   );
 }
 
+/** 読み込み画面への導線（副ボタン）。空状態では文言を「ファイルを読み込む」にする（画面設計書 3.1 節） */
+function ImportButton({ label, className }: { label: string; className?: string }) {
+  return (
+    <Button asChild size="lg" variant="secondary" className={className}>
+      <Link to="/import">
+        <FileUp aria-hidden="true" />
+        {label}
+      </Link>
+    </Button>
+  );
+}
+
 function ListIndexContent() {
   const checklists = useLiveQuery(listChecklists, []);
 
@@ -42,7 +54,10 @@ function ListIndexContent() {
     return (
       <div className="flex flex-col items-center gap-4 py-12">
         <p className="text-muted-foreground">まだチェックリストがありません</p>
-        <NewChecklistButton />
+        <div className="flex flex-wrap justify-center gap-2">
+          <NewChecklistButton />
+          <ImportButton label="ファイルを読み込む" />
+        </div>
       </div>
     );
   }
@@ -57,7 +72,10 @@ function ListIndexContent() {
           </li>
         ))}
       </ul>
-      <NewChecklistButton className="fixed right-4 bottom-4 shadow-lg" />
+      <div className="fixed right-4 bottom-4 flex gap-2">
+        <ImportButton label="読み込み" className="shadow-lg" />
+        <NewChecklistButton className="shadow-lg" />
+      </div>
     </>
   );
 }

@@ -2,8 +2,8 @@
  * 読み込みファイルの解析（仕様書 4.3 節、データ設計書 5.3 節）。DB は触らない。
  * 保存は checklists.ts の importChecklist が行う。
  */
-import { exportFileV1Schema, toValidationIssues } from "./schema";
-import type { ExportFile, ImportError, Result } from "./types";
+import { exportFileV1Schema, fieldName, toValidationIssues } from "./schema";
+import type { ExportFile, ImportError, Result, ValidationIssue } from "./types";
 
 /**
  * 読み込めるファイルの上限（バイト）。各フィールドが上限いっぱいのリストを本アプリが書き出した
@@ -38,4 +38,18 @@ export function parseImportFile(text: string): Result<ExportFile, ImportError> {
     return { ok: false, error: { code: "VALIDATION", issues: toValidationIssues(parsed.error) } };
   }
   return { ok: true, file: parsed.data };
+}
+
+/**
+ * 違反箇所の表示（データ設計書 5.3.1 節「画面への表示」）。
+ * path に items のインデックス i があれば「項目 i+1 の <欄>: <文言>」、なければ「<欄>: <文言>」
+ */
+export function describeImportIssue(issue: ValidationIssue): string {
+  const field = fieldName(issue.path) ?? "ファイル形式";
+  const itemsAt = issue.path.indexOf("items");
+  const index = itemsAt >= 0 ? issue.path[itemsAt + 1] : undefined;
+  // 「の」の後の空白は、欄名が英字で始まるとき（URL）だけ置く。和文どうしは詰める（「項目 1 の期限」）
+  const joined = /^[A-Za-z]/.test(field) ? `の ${field}` : `の${field}`;
+  const where = typeof index === "number" ? `項目 ${index + 1} ${joined}` : field;
+  return `${where}: ${issue.message}`;
 }
