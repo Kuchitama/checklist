@@ -75,6 +75,17 @@ describe("ListDetail", () => {
     expect(screen.queryByText("すべて完了")).not.toBeInTheDocument();
   });
 
+  it("進捗の横に「編集」を出し、編集画面へのリンクにする", async () => {
+    await db.checklists.put(makeChecklist({ id: "list", items: [makeItem({ id: "a" })] }));
+
+    await openDetail();
+
+    expect(await screen.findByRole("link", { name: "編集" })).toHaveAttribute(
+      "href",
+      "/lists/list/edit",
+    );
+  });
+
   it("説明とタグが空なら出さない", async () => {
     await db.checklists.put(
       makeChecklist({ id: "list", title: "空の説明", items: [makeItem({ id: "a" })] }),

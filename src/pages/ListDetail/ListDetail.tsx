@@ -8,8 +8,8 @@ import { ActionMenu } from "@/components/ActionMenu";
 import { AppShell } from "@/components/AppShell";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { ErrorState } from "@/components/ErrorState";
 import { LoadErrorState } from "@/components/LoadErrorState";
+import { NotFoundState } from "@/components/NotFoundState";
 import { ProgressBar } from "@/components/ProgressBar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -95,7 +95,7 @@ function ListDetailContent({ id }: { id: string }) {
       }
     >
       {/* 読み込み中は本文を描画しない。IndexedDB の読み取りは 200ms 以内に終わる前提（画面設計書 2.1 節） */}
-      {checklist === null && !leaving && <NotFound />}
+      {checklist === null && !leaving && <NotFoundState />}
       {checklist && <ChecklistView checklist={checklist} />}
       {/* 文言は画面設計書 5.2 節 */}
       <ConfirmDialog
@@ -116,21 +116,6 @@ function ListDetailContent({ id }: { id: string }) {
         onCancel={() => setConfirming(null)}
       />
     </AppShell>
-  );
-}
-
-/** 画面設計書 3.6 節 */
-function NotFound() {
-  return (
-    <div className="flex flex-col items-center">
-      <ErrorState
-        title="リストが見つかりません"
-        description="削除されたか、別のブラウザで作成されたリストかもしれません"
-      />
-      <Button asChild variant="secondary">
-        <Link to="/">一覧へ</Link>
-      </Button>
-    </div>
   );
 }
 
@@ -231,7 +216,15 @@ function ChecklistView({ checklist }: { checklist: Checklist }) {
           ))}
         </ul>
       )}
-      <ProgressBar done={done} total={checklist.items.length} />
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <ProgressBar done={done} total={checklist.items.length} />
+        </div>
+        {/* 「編集」は進捗バーの右（画面設計書 3.2 節） */}
+        <Button asChild variant="outline">
+          <Link to={`/lists/${checklist.id}/edit`}>編集</Link>
+        </Button>
+      </div>
       {checklist.items.length === 0 ? (
         <p className="text-muted-foreground">項目がありません。編集から追加してください</p>
       ) : (

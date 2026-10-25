@@ -16,6 +16,7 @@ export const routes: RouteObject[] = [
       // lists/new は lists/:id より具体的なので、並び順によらず先に一致する
       { path: "lists/new", element: <ListEdit /> },
       { path: "lists/:id", element: <ListDetail /> },
+      { path: "lists/:id/edit", element: <ListEdit /> },
     ],
   },
 ];
