@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SETTINGS_KEY, type Theme } from "@/domain/settings";
 import { installFakeMatchMedia } from "@/test/matchMedia";
 import { ThemeProvider, useTheme } from "./ThemeProvider";
@@ -44,6 +44,7 @@ describe("ThemeProvider", () => {
 
   afterEach(() => {
     media.restore();
+    vi.restoreAllMocks();
     localStorage.clear();
     document.documentElement.classList.remove("dark");
   });
@@ -118,6 +119,21 @@ describe("ThemeProvider", () => {
     renderProvider();
     expect(isDark()).toBe(true);
     localStorage.removeItem(SETTINGS_KEY);
+    await user.click(screen.getByRole("button", { name: "reload" }));
+    expect(screen.getByTestId("theme")).toHaveTextContent("system");
+    expect(isDark()).toBe(false);
+  });
+
+  it("localStorage が使えない環境では、変更はその場で反映するが保存せず、読み直すと既定値に戻る", async () => {
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("QuotaExceededError");
+    });
+    const user = userEvent.setup();
+    renderProvider();
+    await user.click(screen.getByRole("button", { name: "dark" }));
+    expect(isDark()).toBe(true);
+    expect(localStorage.getItem(SETTINGS_KEY)).toBeNull();
+    // 再読み込み相当。保存されていないので既定値（OS に合わせる）に戻る
     await user.click(screen.getByRole("button", { name: "reload" }));
     expect(screen.getByTestId("theme")).toHaveTextContent("system");
     expect(isDark()).toBe(false);
