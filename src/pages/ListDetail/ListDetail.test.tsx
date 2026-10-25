@@ -1,15 +1,21 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
-import { toggleItem } from "@/domain/checklists";
+import { deleteChecklist, resetChecklist, toggleItem } from "@/domain/checklists";
 import { makeChecklist, makeItem } from "@/test/fixtures";
 import { renderApp } from "@/test/render";
 
 // 楽観更新の途中の状態を作るため、toggleItem だけ差し替えられるようにする（既定は本物を呼ぶ）
 vi.mock("@/domain/checklists", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/domain/checklists")>();
-  return { ...actual, toggleItem: vi.fn(actual.toggleItem) };
+  return {
+    ...actual,
+    toggleItem: vi.fn(actual.toggleItem),
+    resetChecklist: vi.fn(actual.resetChecklist),
+    deleteChecklist: vi.fn(actual.deleteChecklist),
+  };
 });
 
 /** 端末のローカル日付で、今日から days 日後を "YYYY-MM-DD" にする */
@@ -408,5 +414,172 @@ describe("ListDetail のエラー状態", () => {
     expect(within(alert).getByText("データを保存できない環境です")).toBeInTheDocument();
     expect(within(alert).getByText(/プライベートブラウズ/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "再試行" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ListDetail の操作メニュー", () => {
+  const originalMatchMedia = window.matchMedia;
+
+  afterEach(async () => {
+    window.matchMedia = originalMatchMedia;
+    // トーストはモジュール内に状態を持ち、次のテストの Toaster にも出るので消す
+    toast.dismiss();
+    vi.restoreAllMocks();
+    vi.mocked(resetChecklist).mockClear();
+    vi.mocked(deleteChecklist).mockClear();
+    await db.checklists.clear();
+  });
+
+  const seed = () =>
+    db.checklists.put(
+      makeChecklist({
+        id: "list",
+        title: "リリース手順",
+        items: [
+          makeItem({
+            id: "a",
+            title: "CI を確認",
+            checked: true,
+            checkedAt: "2026-10-01T00:00:00.000Z",
+          }),
+          makeItem({ id: "b", title: "タグを打つ" }),
+        ],
+      }),
+    );
+
+  const openMenu = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByRole("button", { name: "操作メニュー" }));
+  };
+
+  it("幅 640px 未満では、ヘッダー右の「操作メニュー」からボトムシートで「リセット」「削除」を出す", async () => {
+    await seed();
+    const { user } = await openDetail();
+
+    await openMenu(user);
+
+    const sheet = await screen.findByRole("dialog", { name: "操作メニュー" });
+    expect(within(sheet).getByRole("button", { name: "リセット" })).toBeInTheDocument();
+    expect(within(sheet).getByRole("button", { name: "削除" })).toBeInTheDocument();
+    await user.click(within(sheet).getByRole("button", { name: "キャンセル" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "操作メニュー" })).not.toBeInTheDocument(),
+    );
+  });
+
+  it("幅 640px 以上では、ドロップダウンで出す", async () => {
+    window.matchMedia = (query: string) =>
+      ({ ...originalMatchMedia(query), matches: query === "(min-width: 640px)" }) as MediaQueryList;
+    await seed();
+    const { user } = await openDetail();
+
+    await openMenu(user);
+
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByRole("menuitem", { name: "リセット" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "削除" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "操作メニュー" })).not.toBeInTheDocument();
+  });
+
+  it("「リセット」は確認ダイアログを出し、確定すると全項目が未完了になって同じ画面に留まる", async () => {
+    await seed();
+    const { user, router } = await openDetail();
+    await openMenu(user);
+
+    await user.click(await screen.findByRole("button", { name: "リセット" }));
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "すべてのチェックを外しますか？",
+    });
+    expect(
+      within(dialog).getByText("完了日時も消えます。項目はそのまま残ります。"),
+    ).toBeInTheDocument();
+    const cancel = within(dialog).getByRole("button", { name: "キャンセル" });
+    await waitFor(() => expect(cancel).toHaveFocus());
+
+    await user.click(within(dialog).getByRole("button", { name: "リセット" }));
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("0 / 2")).toBeInTheDocument());
+    const stored = await db.checklists.get("list");
+    expect(stored?.items.map((i) => [i.checked, i.checkedAt])).toEqual([
+      [false, null],
+      [false, null],
+    ]);
+    expect(stored?.items.map((i) => i.title)).toEqual(["CI を確認", "タグを打つ"]);
+    expect(router.state.location.pathname).toBe("/lists/list");
+  });
+
+  it("確認ダイアログは Esc でキャンセルでき、キャンセルでは何も変わらない", async () => {
+    await seed();
+    const { user } = await openDetail();
+    await openMenu(user);
+    await user.click(await screen.findByRole("button", { name: "リセット" }));
+    await screen.findByRole("alertdialog");
+
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(resetChecklist).not.toHaveBeenCalled();
+    expect((await db.checklists.get("list"))?.items[0]?.checked).toBe(true);
+    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+  });
+
+  it("「削除」は確認ダイアログを出し、確定するとリストを削除して一覧へ戻る", async () => {
+    await seed();
+    const { user, router } = await openDetail();
+    await openMenu(user);
+
+    await user.click(await screen.findByRole("button", { name: "削除" }));
+
+    const dialog = await screen.findByRole("alertdialog", {
+      name: "「リリース手順」を削除しますか？",
+    });
+    expect(
+      within(dialog).getByText("この操作は取り消せません。必要なら先に書き出してください。"),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(dialog).getByRole("button", { name: "キャンセル" })).toHaveFocus(),
+    );
+
+    await user.click(within(dialog).getByRole("button", { name: "削除" }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+    expect(await db.checklists.get("list")).toBeUndefined();
+    expect(screen.queryByText("リストが見つかりません")).not.toBeInTheDocument();
+  });
+
+  it("削除の確認をキャンセルすると、何も変わらない", async () => {
+    await seed();
+    const { user, router } = await openDetail();
+    await openMenu(user);
+    await user.click(await screen.findByRole("button", { name: "削除" }));
+    const dialog = await screen.findByRole("alertdialog");
+
+    await user.click(within(dialog).getByRole("button", { name: "キャンセル" }));
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(deleteChecklist).not.toHaveBeenCalled();
+    expect(await db.checklists.get("list")).toBeDefined();
+    expect(router.state.location.pathname).toBe("/lists/list");
+  });
+
+  it.each([
+    ["リセット", resetChecklist, "/lists/list"],
+    ["削除", deleteChecklist, "/lists/list"],
+  ])("%sの書き込みに失敗したらトーストを出す", async (label, fn, path) => {
+    await seed();
+    vi.mocked(fn).mockRejectedValueOnce(new DOMException("容量不足", "QuotaExceededError"));
+    const { user, router } = await openDetail();
+    await openMenu(user);
+    await user.click(await screen.findByRole("button", { name: label }));
+    const dialog = await screen.findByRole("alertdialog");
+
+    await user.click(within(dialog).getByRole("button", { name: label }));
+
+    expect(
+      await screen.findByText("保存できませんでした。空き容量を確認してください"),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe(path);
+    expect(await db.checklists.get("list")).toBeDefined();
   });
 });

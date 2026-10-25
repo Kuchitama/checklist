@@ -1,24 +1,26 @@
 import { cn } from "cn";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
+import { ActionMenu } from "@/components/ActionMenu";
 import { AppShell } from "@/components/AppShell";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { ProgressBar } from "@/components/ProgressBar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { getChecklist, toggleItem } from "@/domain/checklists";
+import { deleteChecklist, getChecklist, resetChecklist, toggleItem } from "@/domain/checklists";
 import type { Checklist, ChecklistItem } from "@/domain/types";
 import { type DueState, dueState, formatDateTime, formatDueDate } from "@/lib/date";
 import { useToday } from "@/lib/useToday";
 
 /**
- * 詳細画面（画面設計書 3.2 節、仕様書 5.2 節）。項目の表示とチェック・解除を行う。
- * 「編集」ボタンは M2、操作メニュー（リセット・削除・複製・書き出し）は後続の Issue で追加する。
+ * 詳細画面（画面設計書 3.2 節、仕様書 5.2 節）。項目の表示とチェック・解除、リセット、削除を行う。
+ * 「編集」ボタンは M2、操作メニューの複製は M4、書き出しは M3 で追加する。
  */
 export function ListDetail() {
   const { id = "" } = useParams();
@@ -36,14 +38,83 @@ export function ListDetail() {
   );
 }
 
+const SAVE_FAILED = "保存できませんでした。空き容量を確認してください";
+
 function ListDetailContent({ id }: { id: string }) {
+  const navigate = useNavigate();
   // 見つからないときは null にして、読み込み中（undefined）と区別する
   const checklist = useLiveQuery(async () => (await getChecklist(id)) ?? null, [id]);
+  // 開いている確認ダイアログ
+  const [confirming, setConfirming] = useState<"reset" | "delete" | null>(null);
+  // 削除して一覧へ戻る途中は、購読が null を返しても「見つかりません」を出さない
+  const [leaving, setLeaving] = useState(false);
+
+  const reset = async () => {
+    setConfirming(null);
+    try {
+      await resetChecklist(id);
+    } catch {
+      toast.error(SAVE_FAILED, { duration: 5000 });
+    }
+  };
+
+  const remove = async () => {
+    setConfirming(null);
+    try {
+      await deleteChecklist(id);
+      setLeaving(true);
+      // 戻るで消えたリストに戻らないよう、履歴を置き換える
+      navigate("/", { replace: true });
+    } catch {
+      toast.error(SAVE_FAILED, { duration: 5000 });
+    }
+  };
+
   return (
-    <AppShell title={checklist?.title} backTo="/">
+    <AppShell
+      title={checklist?.title}
+      backTo="/"
+      actions={
+        checklist && (
+          <ActionMenu
+            items={[
+              {
+                label: "リセット",
+                icon: <RotateCcw aria-hidden="true" />,
+                onSelect: () => setConfirming("reset"),
+              },
+              {
+                label: "削除",
+                icon: <Trash2 aria-hidden="true" />,
+                danger: true,
+                onSelect: () => setConfirming("delete"),
+              },
+            ]}
+          />
+        )
+      }
+    >
       {/* 読み込み中は本文を描画しない。IndexedDB の読み取りは 200ms 以内に終わる前提（画面設計書 2.1 節） */}
-      {checklist === null && <NotFound />}
+      {checklist === null && !leaving && <NotFound />}
       {checklist && <ChecklistView checklist={checklist} />}
+      {/* 文言は画面設計書 5.2 節 */}
+      <ConfirmDialog
+        open={confirming === "reset"}
+        title="すべてのチェックを外しますか？"
+        message="完了日時も消えます。項目はそのまま残ります。"
+        confirmLabel="リセット"
+        onConfirm={reset}
+        onCancel={() => setConfirming(null)}
+      />
+      <ConfirmDialog
+        open={confirming === "delete"}
+        title={`「${checklist?.title ?? ""}」を削除しますか？`}
+        message="この操作は取り消せません。必要なら先に書き出してください。"
+        confirmLabel="削除"
+        danger
+        onConfirm={remove}
+        onCancel={() => setConfirming(null)}
+      />
     </AppShell>
   );
 }
@@ -90,7 +161,7 @@ function useOptimisticToggle(checklist: Checklist) {
     toggleItem(checklist.id, itemId, checked)
       .catch(() => {
         failed.current.add(itemId);
-        toast.error("保存できませんでした。空き容量を確認してください", { duration: 5000 });
+        toast.error(SAVE_FAILED, { duration: 5000 });
       })
       .finally(() => {
         const rest = (pending.current.get(itemId) ?? 1) - 1;
