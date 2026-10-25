@@ -976,7 +976,10 @@ describe("ListEdit（並び替え）", () => {
   it("各行にドラッグハンドルがあり、操作説明が日本語で結び付いている", async () => {
     await openWithItems();
 
-    expect(handle(0)).toHaveAccessibleDescription(/Space を押して項目を持ち上げ/);
+    // dnd-kit は操作説明の要素を useEffect でマウントする（描画の次のコミット）ので、結び付くまで待つ
+    await waitFor(() =>
+      expect(handle(0)).toHaveAccessibleDescription(/Space を押して項目を持ち上げ/),
+    );
     expect(handle(0)).toHaveAttribute("aria-roledescription", "並び替えできる項目");
   });
 
