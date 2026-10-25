@@ -68,11 +68,14 @@ export async function updateChecklist(id: string, input: ChecklistInput): Promis
     if (!current) throw new ChecklistNotFoundError(`リストがありません: ${id}`);
 
     const existing = new Map(current.items.map((item) => [item.id, item]));
+    const seen = new Set<string>();
     const unknown: ValidationIssue[] = [];
     const items: ChecklistItem[] = normalized.items.map((item, index) => {
       const previous = item.id === undefined ? undefined : existing.get(item.id);
-      if (item.id !== undefined && !previous) {
-        // 既存にない id は編集画面の改変か古い画面からの保存。拒否して読み込み直してもらう（4.1 節の 3）
+      // 既存にない id や同じ id の繰り返しは、編集画面の改変か古い画面からの保存。拒否して読み込み直してもらう（4.1 節の 3）
+      const invalid = item.id !== undefined && (!previous || seen.has(item.id));
+      if (item.id !== undefined) seen.add(item.id);
+      if (invalid) {
         unknown.push({
           path: ["items", index, "id"],
           code: "unknown_id",

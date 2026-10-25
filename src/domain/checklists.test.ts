@@ -370,6 +370,28 @@ describe("updateChecklist", () => {
     expect(await db.checklists.get("list")).toEqual(existing());
   });
 
+  it("同じ id を 2 回含む入力は、2 回目を unknown_id で拒否し、何も保存しない", async () => {
+    const error = await updateChecklist(
+      "list",
+      makeChecklistInput({
+        items: [
+          { id: "a", title: "パスポート", note: "", url: null, dueDate: null },
+          { id: "a", title: "パスポート（複製）", note: "", url: null, dueDate: null },
+        ],
+      }),
+    ).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ChecklistValidationError);
+    expect((error as ChecklistValidationError).issues).toEqual([
+      {
+        path: ["items", 1, "id"],
+        code: "unknown_id",
+        message: "項目の識別子が不正です。画面を再読み込みしてください",
+      },
+    ]);
+    expect(await db.checklists.get("list")).toEqual(existing());
+  });
+
   it("検証エラーは createChecklist と同じ形で返し、何も保存しない", async () => {
     const error = await updateChecklist(
       "list",
