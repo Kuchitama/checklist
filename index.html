@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>チェックリスト</title>
+    <!-- ブラウザの UI の色。ライトは --background（白）、ダークは --background（oklch(0.145 0 0) ≒ #0a0a0a）（仕様書 7 章） -->
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
     <script>
       // 初回描画のちらつきを防ぐため、React の起動前にテーマを決める（画面設計書 7.3 節）。
       // 判定は src/domain/settings.ts の readSettings / resolveTheme と同じにする（データ設計書 6 章）。

@@ -58,6 +58,7 @@ M0 時点で採用したバージョン（2026-10-23 確認: npm レジストリ
 | vitest | 5.0.5 | |
 | @testing-library/user-event | 14.6.8 | クリックなど利用者の操作を再現する単体テスト用（#8 で導入） |
 | dexie / dexie-react-hooks | 4.4.6 / 4.4.0 | |
+| vite-plugin-pwa / workbox-window | 2.0.0 / 7.4.1 | Service Worker（Workbox の `generateSW`）とマニフェストの生成（7 章）。`workbox-window` はプラグインの依存だが、pnpm では仮想モジュール `virtual:pwa-register` から解決できずビルドが失敗するため、直接の devDependencies に置く。2026-10-25 確認: npm レジストリの `latest`（2.0.0 は 2026-10-03 公開）。M5 の Issue #66 で導入 |
 | zod | 4.6.7 | |
 
 ### 2.1 パッケージ管理ポリシー（pnpm）
