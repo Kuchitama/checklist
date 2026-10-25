@@ -28,8 +28,14 @@ test("機内モード: Service Worker の有効化後は、通信なしで再起
   await expect(page.getByRole("link", { name: /機内で見る手順/ })).toBeVisible();
   await page.getByRole("link", { name: /機内で見る手順/ }).click();
   await expect(page).toHaveURL(detailUrl);
-  // オフラインでも操作が保存される
+  // オフラインでも操作が保存される。楽観更新の表示ではなく、DB の購読に反映された完了日時を待ち、
+  // オフラインのまま再読み込みしてもチェックが残ることを確かめる
   await page.getByRole("checkbox", { name: "搭乗券を出す" }).check();
+  await expect(page.getByText("すべて完了")).toBeVisible();
+  await expect(page.getByText(/^完了 /)).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 1, name: "機内で見る手順" })).toBeVisible();
+  await expect(page.getByRole("checkbox", { name: "搭乗券を出す" })).toBeChecked();
   await expect(page.getByText("すべて完了")).toBeVisible();
   await context.setOffline(false);
 });
