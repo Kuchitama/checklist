@@ -5,8 +5,8 @@
 import { db } from "@/db";
 import { ChecklistNotFoundError, ChecklistValidationError } from "./errors";
 import { normalizeChecklistInput } from "./normalize";
-import { validateChecklistInput } from "./schema";
-import type { Checklist, ChecklistInput } from "./types";
+import { messageFor, validateChecklistInput } from "./schema";
+import type { Checklist, ChecklistInput, ChecklistItem, ValidationIssue } from "./types";
 
 const now = () => new Date().toISOString();
 
@@ -51,6 +51,57 @@ export async function createChecklist(input: ChecklistInput): Promise<Checklist>
     await db.checklists.add(checklist);
   });
   return checklist;
+}
+
+/**
+ * 既存のリストを入力で置き換える（データ設計書 4 章）。項目はデータ設計書 4.1 節の規則でマージし、
+ * id を持つ既存項目は checked / checkedAt を引き継ぐ。読み取りから書き込みまでを 1 トランザクションで行う。
+ * 検証に通らなければ ChecklistValidationError、リストがなければ ChecklistNotFoundError を投げ、何も保存しない。
+ */
+export async function updateChecklist(id: string, input: ChecklistInput): Promise<Checklist> {
+  const normalized = normalizeChecklistInput(input);
+  const issues = validateChecklistInput(normalized);
+  if (issues.length > 0) throw new ChecklistValidationError(issues);
+
+  return db.transaction("rw", db.checklists, async () => {
+    const current = await db.checklists.get(id);
+    if (!current) throw new ChecklistNotFoundError(`リストがありません: ${id}`);
+
+    const existing = new Map(current.items.map((item) => [item.id, item]));
+    const unknown: ValidationIssue[] = [];
+    const items: ChecklistItem[] = normalized.items.map((item, index) => {
+      const previous = item.id === undefined ? undefined : existing.get(item.id);
+      if (item.id !== undefined && !previous) {
+        // 既存にない id は編集画面の改変か古い画面からの保存。拒否して読み込み直してもらう（4.1 節の 3）
+        unknown.push({
+          path: ["items", index, "id"],
+          code: "unknown_id",
+          message: messageFor("unknown_id", undefined),
+        });
+      }
+      return {
+        id: previous?.id ?? crypto.randomUUID(),
+        title: item.title,
+        note: item.note,
+        url: item.url,
+        dueDate: item.dueDate,
+        checked: previous?.checked ?? false,
+        checkedAt: previous?.checkedAt ?? null,
+      };
+    });
+    if (unknown.length > 0) throw new ChecklistValidationError(unknown);
+
+    const checklist: Checklist = {
+      ...current,
+      title: normalized.title,
+      description: normalized.description,
+      tags: normalized.tags,
+      items,
+      updatedAt: now(),
+    };
+    await db.checklists.put(checklist);
+    return checklist;
+  });
 }
 
 /**

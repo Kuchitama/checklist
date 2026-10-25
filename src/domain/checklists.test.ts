@@ -8,6 +8,7 @@ import {
   listChecklists,
   resetChecklist,
   toggleItem,
+  updateChecklist,
 } from "./checklists";
 import { ChecklistNotFoundError, ChecklistValidationError } from "./errors";
 
@@ -238,5 +239,169 @@ describe("toggleItem / resetChecklist / deleteChecklist", () => {
     expect(await db.checklists.get("list")).toBeUndefined();
 
     await expect(deleteChecklist("list")).resolves.toBeUndefined();
+  });
+});
+
+describe("updateChecklist", () => {
+  const existing = () =>
+    makeChecklist({
+      id: "list",
+      title: "旅行の持ち物",
+      description: "前回の反省",
+      tags: ["旅行"],
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+      items: [
+        makeItem({
+          id: "a",
+          title: "パスポート",
+          checked: true,
+          checkedAt: "2026-10-02T00:00:00.000Z",
+        }),
+        makeItem({ id: "b", title: "充電器", note: "モバイルバッテリーも" }),
+        makeItem({ id: "c", title: "傘" }),
+      ],
+    });
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-23T01:02:03.004Z"));
+    await db.checklists.put(existing());
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    await db.checklists.clear();
+  });
+
+  it("タイトル・説明・タグを置き換え、createdAt を保って updatedAt を現在時刻にする", async () => {
+    const updated = await updateChecklist(
+      "list",
+      makeChecklistInput({
+        title: " 出張の持ち物 ",
+        description: "来週の分\r\n忘れずに",
+        tags: ["出張", " 出張 ", "仕事"],
+        items: [{ id: "a", title: "パスポート", note: "", url: null, dueDate: null }],
+      }),
+    );
+
+    expect(updated).toMatchObject({
+      id: "list",
+      title: "出張の持ち物",
+      description: "来週の分\n忘れずに",
+      tags: ["出張", "仕事"],
+      createdAt: "2026-09-01T00:00:00.000Z",
+      updatedAt: "2026-10-23T01:02:03.004Z",
+    });
+    expect(await db.checklists.get("list")).toEqual(updated);
+  });
+
+  it("id のある項目はチェック状態を引き継いで内容を置き換え、id のない項目は新規に採番し、入力にない項目は消す。順序は入力順", async () => {
+    const updated = await updateChecklist(
+      "list",
+      makeChecklistInput({
+        items: [
+          { title: "新しい項目", note: "", url: null, dueDate: null },
+          {
+            id: "a",
+            title: "パスポート（更新）",
+            note: "期限を確認",
+            url: "https://example.com/p",
+            dueDate: "2026-12-01",
+          },
+          { id: "b", title: "充電器", note: "", url: null, dueDate: null },
+        ],
+      }),
+    );
+
+    expect(updated.items).toEqual([
+      {
+        id: expect.stringMatching(UUID),
+        title: "新しい項目",
+        note: "",
+        url: null,
+        dueDate: null,
+        checked: false,
+        checkedAt: null,
+      },
+      {
+        id: "a",
+        title: "パスポート（更新）",
+        note: "期限を確認",
+        url: "https://example.com/p",
+        dueDate: "2026-12-01",
+        checked: true,
+        checkedAt: "2026-10-02T00:00:00.000Z",
+      },
+      {
+        id: "b",
+        title: "充電器",
+        note: "",
+        url: null,
+        dueDate: null,
+        checked: false,
+        checkedAt: null,
+      },
+    ]);
+    expect(updated.items[0]?.id).not.toBe("c");
+    expect(await db.checklists.get("list")).toEqual(updated);
+  });
+
+  it("既存にない id を持つ項目は unknown_id で拒否し、何も保存しない", async () => {
+    const error = await updateChecklist(
+      "list",
+      makeChecklistInput({
+        items: [
+          { id: "a", title: "パスポート", note: "", url: null, dueDate: null },
+          { id: "missing", title: "どこかの項目", note: "", url: null, dueDate: null },
+        ],
+      }),
+    ).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ChecklistValidationError);
+    expect((error as ChecklistValidationError).issues).toEqual([
+      {
+        path: ["items", 1, "id"],
+        code: "unknown_id",
+        message: "項目の識別子が不正です。画面を再読み込みしてください",
+      },
+    ]);
+    expect(await db.checklists.get("list")).toEqual(existing());
+  });
+
+  it("検証エラーは createChecklist と同じ形で返し、何も保存しない", async () => {
+    const error = await updateChecklist(
+      "list",
+      makeChecklistInput({
+        title: "",
+        items: [{ id: "a", title: " ", note: "", url: null, dueDate: null }],
+      }),
+    ).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ChecklistValidationError);
+    expect((error as ChecklistValidationError).issues.map((i) => [i.path, i.code])).toEqual([
+      [["title"], "required"],
+      [["items", 0, "title"], "required"],
+    ]);
+    expect(await db.checklists.get("list")).toEqual(existing());
+  });
+
+  it("存在しないリストは ChecklistNotFoundError を投げ、何も書き込まない", async () => {
+    await expect(updateChecklist("missing", makeChecklistInput())).rejects.toBeInstanceOf(
+      ChecklistNotFoundError,
+    );
+    expect(await db.checklists.count()).toBe(1);
+    expect(await db.checklists.get("list")).toEqual(existing());
+  });
+
+  it("DB への書き込み失敗は呼び出し元へ伝える", async () => {
+    vi.spyOn(db.checklists, "put").mockRejectedValue(
+      new DOMException("容量不足", "QuotaExceededError"),
+    );
+
+    await expect(updateChecklist("list", makeChecklistInput({ items: [] }))).rejects.toMatchObject({
+      name: "QuotaExceededError",
+    });
   });
 });
