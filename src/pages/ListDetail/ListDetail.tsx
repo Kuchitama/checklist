@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import { useLiveQuery } from "dexie-react-hooks";
 import { ExternalLink } from "lucide-react";
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
@@ -62,19 +62,33 @@ function NotFound() {
   );
 }
 
+/** 一時状態。settledAt は書き込みがすべて成功した時点の購読値の updatedAt（5.4 節の手順 4） */
+type Optimistic = { value: boolean; settledAt?: string };
+
 /**
  * チェックの楽観更新（画面設計書 5.4 節）。項目ごとに一時状態と進行中の書き込み数を持ち、
- * 書き込みがすべて終わるまでは一時状態を DB の値より優先して表示する。
+ * 書き込みが終わって購読値に反映されるまでは、一時状態を DB の値より優先して表示する。
  */
-function useOptimisticToggle(listId: string) {
-  const [optimistic, setOptimistic] = useState<ReadonlyMap<string, boolean>>(new Map());
+function useOptimisticToggle(checklist: Checklist) {
+  const [optimistic, setOptimistic] = useState<ReadonlyMap<string, Optimistic>>(new Map());
   const pending = useRef(new Map<string, number>());
+  const failed = useRef(new Set<string>());
+  const latest = useRef(checklist);
+  latest.current = checklist;
+
+  const update = (change: (next: Map<string, Optimistic>) => void) =>
+    setOptimistic((current) => {
+      const next = new Map(current);
+      change(next);
+      return next;
+    });
 
   const toggle = (itemId: string, checked: boolean) => {
-    setOptimistic((current) => new Map(current).set(itemId, checked));
+    update((next) => next.set(itemId, { value: checked }));
     pending.current.set(itemId, (pending.current.get(itemId) ?? 0) + 1);
-    toggleItem(listId, itemId, checked)
+    toggleItem(checklist.id, itemId, checked)
       .catch(() => {
+        failed.current.add(itemId);
         toast.error("保存できませんでした。空き容量を確認してください", { duration: 5000 });
       })
       .finally(() => {
@@ -83,22 +97,46 @@ function useOptimisticToggle(listId: string) {
           pending.current.set(itemId, rest);
           return;
         }
-        // 進行中の書き込みがなくなったら、以後は DB の値（失敗時は巻き戻った値）を表示する
         pending.current.delete(itemId);
-        setOptimistic((current) => {
-          const next = new Map(current);
-          next.delete(itemId);
-          return next;
+        if (failed.current.delete(itemId)) {
+          // 失敗を含むときは直ちに DB の値へ巻き戻す
+          update((next) => next.delete(itemId));
+          return;
+        }
+        // 成功時は、保存の完了が購読値の更新より先に届くことがあるので、反映済みでなければまだ消さない
+        const snapshot = latest.current;
+        const item = snapshot.items.find((i) => i.id === itemId);
+        update((next) => {
+          const entry = next.get(itemId);
+          if (!entry) return;
+          if (!item || item.checked === entry.value) next.delete(itemId);
+          else next.set(itemId, { ...entry, settledAt: snapshot.updatedAt });
         });
       });
   };
 
-  return { optimistic, toggle };
+  // 書き込みが反映された購読値、または後から別の書き込みがあった購読値が届いたら一時状態を捨てる
+  useEffect(() => {
+    setOptimistic((current) => {
+      let next: Map<string, Optimistic> | undefined;
+      for (const [itemId, entry] of current) {
+        if (entry.settledAt === undefined) continue;
+        const item = checklist.items.find((i) => i.id === itemId);
+        if (!item || item.checked === entry.value || checklist.updatedAt !== entry.settledAt) {
+          next ??= new Map(current);
+          next.delete(itemId);
+        }
+      }
+      return next ?? current;
+    });
+  }, [checklist]);
+
+  const isChecked = (item: ChecklistItem) => optimistic.get(item.id)?.value ?? item.checked;
+  return { isChecked, toggle };
 }
 
 function ChecklistView({ checklist }: { checklist: Checklist }) {
-  const { optimistic, toggle } = useOptimisticToggle(checklist.id);
-  const isChecked = (item: ChecklistItem) => optimistic.get(item.id) ?? item.checked;
+  const { isChecked, toggle } = useOptimisticToggle(checklist);
   const done = checklist.items.filter(isChecked).length;
 
   return (

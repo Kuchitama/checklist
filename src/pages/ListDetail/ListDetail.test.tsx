@@ -253,6 +253,74 @@ describe("ListDetail", () => {
     expect(toggleItem).toHaveBeenNthCalledWith(2, "list", "a", false);
   });
 
+  it("書き込みが終わっても、それを反映した購読値が届くまでは一時状態を保つ（巻き戻らない）", async () => {
+    await db.checklists.put(
+      makeChecklist({
+        id: "list",
+        updatedAt: "2026-10-01T00:00:00.000Z",
+        items: [makeItem({ id: "a", title: "パスポート" })],
+      }),
+    );
+    // 保存は完了したが、購読値（useLiveQuery）はまだ古い、という順序を作る
+    vi.mocked(toggleItem).mockResolvedValueOnce(undefined);
+    const { user } = await openDetail();
+    const box = await screen.findByRole("checkbox", { name: "パスポート" });
+
+    await user.click(box);
+    await act(async () => {});
+
+    expect(box).toBeChecked();
+    expect(screen.getByText("1 / 1")).toBeInTheDocument();
+
+    await act(async () => {
+      await db.checklists.put(
+        makeChecklist({
+          id: "list",
+          updatedAt: "2026-10-02T00:00:00.000Z",
+          items: [
+            makeItem({
+              id: "a",
+              title: "パスポート",
+              checked: true,
+              checkedAt: "2026-10-02T00:00:00.000Z",
+            }),
+          ],
+        }),
+      );
+    });
+    await waitFor(() => expect(screen.getByText(/^完了 /)).toBeInTheDocument());
+    expect(box).toBeChecked();
+  });
+
+  it("書き込み後に別の書き込みで値が変わったら、一時状態を捨てて DB の値を出す", async () => {
+    await db.checklists.put(
+      makeChecklist({
+        id: "list",
+        updatedAt: "2026-10-01T00:00:00.000Z",
+        items: [makeItem({ id: "a", title: "パスポート" })],
+      }),
+    );
+    vi.mocked(toggleItem).mockResolvedValueOnce(undefined);
+    const { user } = await openDetail();
+    const box = await screen.findByRole("checkbox", { name: "パスポート" });
+
+    await user.click(box);
+    await act(async () => {});
+    expect(box).toBeChecked();
+
+    // 別のタブなどで未チェックのまま更新された（updatedAt が変わった）
+    await act(async () => {
+      await db.checklists.put(
+        makeChecklist({
+          id: "list",
+          updatedAt: "2026-10-02T00:00:00.000Z",
+          items: [makeItem({ id: "a", title: "パスポート" })],
+        }),
+      );
+    });
+    await waitFor(() => expect(box).not.toBeChecked());
+  });
+
   it("書き込みに失敗したら表示を DB の値に戻し、トーストを出す", async () => {
     await db.checklists.put(
       makeChecklist({ id: "list", items: [makeItem({ id: "a", title: "パスポート" })] }),
