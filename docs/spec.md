@@ -58,6 +58,7 @@ M0 時点で採用したバージョン（2026-10-23 確認: npm レジストリ
 | vitest | 5.0.5 | |
 | @testing-library/user-event | 14.6.8 | クリックなど利用者の操作を再現する単体テスト用（#8 で導入） |
 | dexie / dexie-react-hooks | 4.4.6 / 4.4.0 | |
+| @playwright/test | 1.64.1 | E2E（10 章・11 章）。2026-10-25 確認: npm レジストリの `latest`、2026-10-14 公開。M5 の Issue #68 で導入 |
 | vite-plugin-pwa / workbox-window | 2.0.0 / 7.4.1 | Service Worker（Workbox の `generateSW`）とマニフェストの生成（7 章）。`workbox-window` はプラグインの依存だが、pnpm では仮想モジュール `virtual:pwa-register` から解決できずビルドが失敗するため、直接の devDependencies に置く。2026-10-25 確認: npm レジストリの `latest`（2.0.0 は 2026-10-03 公開）。M5 の Issue #66 で導入 |
 | zod | 4.6.7 | |
 
@@ -269,7 +270,7 @@ clearAllData(): Promise<void>
 │   ├── ISSUE_TEMPLATE/ # 受け入れ基準を必須にした Issue テンプレート
 │   ├── pull_request_template.md
 │   └── workflows/
-│       ├── ci.yml      # PR: pnpm verify（M5 以降は E2E も）
+│       ├── ci.yml      # PR: pnpm verify → playwright install → pnpm verify:e2e
 │       └── deploy.yml  # main: build → GitHub Pages
 ├── CLAUDE.md           # エージェント向けの約束事（12.2 節）
 ├── docs/               # 本仕様書と設計書（docs/design/）
@@ -354,7 +355,7 @@ M1 以降の機能開発は AI エージェントに任せる前提で、エー�
 **H-1 単一の検証コマンド（内側のループ）**
 
 - `pnpm verify` を唯一の合格判定とする。中身は `biome ci` → `tsc --noEmit` → `vitest run` → `vite build` の直列実行で、CI の `ci.yml` もこれを呼ぶだけにする。ローカルと CI で判定がずれないようにするため。
-- `pnpm verify:e2e` で Playwright（Chromium）を実行する。M5 以降は `verify` に含める。
+- `pnpm verify:e2e` で Playwright（Chromium）を実行する。`verify` には含めず、CI で `verify` の後に別工程で実行する（11 章。`verify` は pre-push と `deploy.yml` でも走り、ブラウザの導入を前提にできないため。M5 の Issue #68 で決定）。
 - 各コマンドは失敗箇所をファイル名と行番号付きで標準出力に出し、エージェントがそのまま次の修正に使えるようにする。Vitest は `--reporter=verbose`、Playwright は失敗時にトレースとスクリーンショットを `playwright-report/` に残す。
 - `pnpm dev` の起動と `pnpm verify` が、クリーンな環境で `pnpm install --frozen-lockfile` 直後に通ることを H の完了条件に含める。
 

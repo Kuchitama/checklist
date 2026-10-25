@@ -17,5 +17,14 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # 唯一の合格判定（仕様書 12.2 節 H-1）。M5 以降は E2E も加える
+      # 唯一の合格判定（仕様書 12.2 節 H-1）
       - run: pnpm verify
+      # E2E（仕様書 11 章）。verify とは別工程にする（pre-push と deploy.yml の verify はブラウザの導入を前提にしない）
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm verify:e2e
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

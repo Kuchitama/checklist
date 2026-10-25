@@ -100,14 +100,14 @@
 
 ## 9. コマンド
 
-M0 で導入済み。`verify:e2e` は M5 で追加する。
+M0 で導入済み。`verify:e2e` は M5（Issue #68）で追加した。
 
 | コマンド | 内容 |
 | --- | --- |
 | `pnpm install --frozen-lockfile` | 依存の導入。ロックファイルと異なる解決を許さない |
 | `pnpm dev` | 開発サーバー |
 | `pnpm verify` | 唯一の合格判定。`biome ci` → `tsc --noEmit` → `vitest run` → `vite build` |
-| `pnpm verify:e2e` | Playwright（Chromium）。M5 以降は `verify` に含める |
+| `pnpm verify:e2e` | Playwright（Chromium）。ビルドして `vite preview` に対して `e2e/` を実行する。`verify` には含めず、CI で `verify` の後に別工程で実行する（仕様書 11 章。pre-push と `deploy.yml` の `verify` はブラウザの導入を前提にしない）。ブラウザを別に用意する環境では `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` で指定できる |
 
 `pnpm verify` が通らない変更を push しない。Git フック（lefthook）が pre-commit で整形、pre-push で `pnpm verify` を走らせる。Claude Code のフック（`.claude/settings.json`）が禁止コマンドを拒否し、編集後に整形する。詳細は `docs/harness.md`。
 

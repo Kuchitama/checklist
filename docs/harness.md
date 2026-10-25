@@ -11,6 +11,7 @@
 | 層 | 仕組み | 場所 | 導入 |
 | --- | --- | --- | --- |
 | H-1 検証 | `pnpm verify`（`biome ci` → `tsc --noEmit` → `vitest run` → `vite build`）が唯一の合格判定。CI も同じコマンドを呼ぶ | `package.json`、`.github/workflows/ci.yml` | M0 |
+| H-1 E2E | `pnpm verify:e2e`（Playwright、Chromium）。ビルドして `vite preview` に対して `e2e/` のシナリオ（US-1、US-4/5、US-6/7、オフライン、テーマ）を実行する。`verify` には含めず、CI で `verify` の後に別工程で実行し、失敗時は `playwright-report/` を保存する | `playwright.config.ts`、`e2e/`、`.github/workflows/ci.yml` | M5（Issue #68） |
 | H-2 約束事 | 文書の優先順位、既定値、作業手順、レビュー対応の型、禁止事項 | `CLAUDE.md` | H |
 | H-3 Git フック | pre-commit で変更ファイルを Biome 整形、pre-push で `pnpm verify`。`pnpm install` 時の `prepare` で有効化 | `lefthook.yml` | H |
 | H-3 Claude Code フック | セッション開始時に `pnpm install --frozen-lockfile` で依存をロックファイルに同期（`prepare` で lefthook も有効化）。Bash の禁止コマンド（フックの迂回、テスト削除、main への force push、npm / npx / yarn）を拒否。編集後に Biome 整形 | `.claude/settings.json`、`.claude/hooks/` | H |
@@ -108,5 +109,6 @@
 - Claude Code のフックは、セッション開始時に `.claude/settings.json` が存在していた場合にだけ自動で読み込まれる。このファイルを初めて取り込んだ後は、`/hooks` を一度開くかセッションを再起動する。
 - `guard-bash` はコマンド文字列をシェル風に単語分割し、各単純コマンドの先頭語と引数で判定する。ヒアドキュメントの本文は判定しない。引用された引数（`rm "a.test.ts"`）は引用を外して判定する。`echo "rm a.test.ts"` のように引数の中に禁止語があるだけでは拒否しない。`sudo` や `VAR=x` の前置き、`/usr/bin/git` のようなパスつき呼び出しにも対応する。判定の網羅性には限りがあるため、最後の砦はブランチ保護と CI である（禁止を解除する設定は置かない）。
 - lefthook は `git commit` / `git push` を行う環境に Node.js と pnpm があることを前提にする。GitHub の Web UI からのマージには関与しない。
-- 計測に使う headless Chromium（Playwright）では、`download` 属性に日本語を含むファイル名を与えると `suggestedFilename()` が `download` になる（ASCII の名前は正しい。2026-10-25、PR #48 で確認）。日本語のファイル名は実機のブラウザで確かめる。
+- 計測に使う headless Chromium（Playwright）では、`download` 属性に日本語を含むファイル名を与えると `suggestedFilename()` が `download` になる（ASCII の名前は正しい。2026-10-25、PR #48 で確認）。日本語のファイル名は実機のブラウザで確かめる。E2E の書き出しのシナリオは、ファイル名ではなくダウンロードしたファイルの中身で確かめる。
+- Playwright のブラウザをダウンロードできない環境（ネットワークが閉じた開発用コンテナなど）では、`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` に既存の Chromium のパスを渡して `pnpm verify:e2e` を実行する（`playwright.config.ts` の `launchOptions.executablePath`）。Playwright が想定するより古い版でも主要なシナリオは動くが、CI では `playwright install --with-deps chromium` で揃えた版を使う。
 - Vitest のフェイクタイマー（`vi.useFakeTimers()`）の下では、Dexie / fake-indexeddb を使う購読（`useLiveQuery`）が完了せずテストがタイムアウトする（2026-10-25、PR #59 で確認）。時間の境界（デバウンスの 149ms / 150ms など）は、DB を触らない純粋なフックや関数の単体テストでフェイクタイマーにより確かめ、画面のテストは実時間で挙動だけを確かめる。
