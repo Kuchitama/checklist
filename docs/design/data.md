@@ -368,7 +368,7 @@ checklist-<safeTitle>-<YYYYMMDD>.json
 | `checklist.settings` | `{ "version": 1, "theme": "system" \| "light" \| "dark" }` |
 
 - 読み取り時に JSON として解析できない、`version` が `1` でない、`theme` が 3 値以外のときは、既定値 `{ version: 1, theme: "system" }` で上書きする。
-- `localStorage` が使えない環境（例外が出る）では既定値で動作し、変更は保存しない。
+- `localStorage` が使えない環境（例外が出る）では既定値で動作し、変更は保存しない。設定画面での変更はその場の表示には反映するが（利用者の操作に応答する）、保存できないので次の起動では既定値に戻る。例外は画面に出さない。
 - Service Worker の更新通知の状態は永続化しない。
 
 ## 7. テストデータ

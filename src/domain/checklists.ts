@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { ChecklistNotFoundError, ChecklistValidationError } from "./errors";
 import { normalizeChecklistInput } from "./normalize";
 import { cpLength, messageFor, validateChecklistInput } from "./schema";
+import { removeSettings } from "./settings";
 import type {
   Checklist,
   ChecklistInput,
@@ -253,4 +254,13 @@ export async function searchChecklists(query: string, tags: string[]): Promise<C
     const haystack = [checklist.title, ...checklist.items.map((item) => item.title)].map(forMatch);
     return words.every((word) => haystack.some((text) => text.includes(word)));
   });
+}
+
+/**
+ * 全データ削除（仕様書 5.5 節、データ設計書 4 章）。
+ * リストを全削除し、localStorage の設定も消す。リストが 0 件でも成功する
+ */
+export async function clearAllData(): Promise<void> {
+  await db.checklists.clear();
+  removeSettings();
 }
