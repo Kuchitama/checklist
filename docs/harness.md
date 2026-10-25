@@ -16,7 +16,7 @@
 | H-3 Claude Code フック | セッション開始時に `pnpm install --frozen-lockfile` で依存をロックファイルに同期（`prepare` で lefthook も有効化）。Bash の禁止コマンド（フックの迂回、テスト削除、main への force push、npm / npx / yarn）を拒否。編集後に Biome 整形 | `.claude/settings.json`、`.claude/hooks/` | H |
 | H-3 権限 | pnpm、node、git の日常操作、読み取り系コマンドを事前承認し、確認待ちで止まらないようにする | `.claude/settings.json` | H |
 | H-4 作業単位 | Issue テンプレート（目的・受け入れ基準・対象外・関連する仕様の節）、PR テンプレート（対応 Issue・変更内容・検証・レビュー点） | `.github/ISSUE_TEMPLATE/`、`.github/pull_request_template.md` | H |
-| H-4 自動レビュー | Copilot のコードレビューを PR 作成時に自動実行。指摘への対応はエージェントのループに含める | リポジトリ設定 | 導入済み |
+| H-4 自動レビュー | Copilot のコードレビュー。リポジトリ設定の自動実行は数時間遅れることがあるため、エージェントが PR 作成直後に API（`request_copilot_review`）で依頼する。指摘への対応はエージェントのループに含める | リポジトリ設定、エージェントの作業ループ（2 章） | 導入済み |
 | H-4 ブランチ保護 | main への直接 push 禁止。`verify` と `gitleaks` を必須チェックにする | リポジトリ設定（オーナーの操作）。Rulesets の `main` | 導入済み（2026-10-24、Issue #12） |
 | 依存更新 | Dependabot が週 1 回、1 日の cooldown を置いて npm と GitHub Actions の更新 PR を出す | `.github/dependabot.yml` | H |
 | 秘密情報 | gitleaks の CI と `.gitignore` | `docs/security.md` | 導入済み |
@@ -24,11 +24,11 @@
 ## 2. エージェントの作業ループ
 
 1. Issue の「受け入れ基準」を読む。曖昧なら Issue にコメントで質問し、推奨案を添える。
-2. `main` から `feat/<issue 番号>-<要約>` を切る。別の PR の上に積まない。
+2. `main` から `feat/<issue 番号>-<要約>` を切る。別の PR の上に積まない。前の PR の CI・レビュー待ちの間に次の Issue をローカルで進めてよいが、push は前の PR がマージされた後に `main` へ載せ替え（`git rebase --onto origin/main <前の PR の先頭> <ブランチ>`）、`pnpm verify` を通してから行う。
 3. 受け入れ基準ごとに失敗するテストを先に書く。回帰テストは、実装を 1 箇所壊して失敗することを確かめる。PR を出す前の自己確認は CLAUDE.md 5 章 8。
 4. 実装し、`pnpm verify` が通るまで直す。編集のたびに Biome 整形のフックが走る。
 5. 論理単位でコミットする。pre-commit で整形、pre-push で `pnpm verify` が走る。
-6. PR テンプレートに沿って PR を出し、PR イベントを購読する。
+6. PR テンプレートに沿って PR を出し、PR イベントを購読し、Copilot のレビューを API で依頼する（1 章 H-4）。
 7. CI と自動レビューの指摘に対応する。1 スレッド 1 コミット、返信に SHA を書く（CLAUDE.md 6 章）。
 8. 緑になり、自動レビューの指摘が解決済みで、判断を仰ぐ事項がなければマージする（CLAUDE.md 5 章 7。2026-10-25 にオーナーが決定）。判断を仰ぐ事項があれば人のレビューを待つ。人の差し戻しは「受け入れ基準か CLAUDE.md の不足」として扱い、必要なら両方を直す。
 9. M の最後の PR をマージしたら、その M の振り返り（`docs/retrospective-m<番号>.md`）を書き、抽出した学びから必要なハーネス（1 章の構成）を同じ PR で更新する。マージ後に、人に動作確認と次の M への着手を確認する。
@@ -48,6 +48,8 @@
 現在値（2026-10-23、Issue #8 完了時点）: `pnpm verify` 約 6 秒（手元、テスト 10 件）、CI の `verify` ジョブ約 30 秒。
 
 現在値（2026-10-25、M1 完了時点）: `pnpm verify` 約 12〜14 秒（手元、テスト 114 件）、CI の `verify` ジョブ約 30 秒。M1 の Issue 7 件で人の差し戻し 1 回、自動レビューの指摘 11 件（誤検知 0）。集計と学びは `docs/retrospective-m1.md`。
+
+現在値（2026-10-25、M2 完了時点）: `pnpm verify` 約 13〜17 秒（手元、テスト 164 件）、CI の `verify` ジョブ約 35 秒。M2 の Issue 5 件で人の差し戻し 0 回、自動レビューの指摘 10 件（誤検知 0）。5 件の PR すべてを CLAUDE.md 5 章 7 の条件でエージェントがマージした。集計と学びは `docs/retrospective-m2.md`。
 
 ## 4. 完了条件（仕様書 12.2 節）と状態
 
