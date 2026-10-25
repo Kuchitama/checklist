@@ -1,11 +1,18 @@
-import { screen, within } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
+import { searchChecklists } from "@/domain/checklists";
 import type { ChecklistItem } from "@/domain/types";
 import { makeChecklist } from "@/test/fixtures";
 import { renderWithRouter } from "@/test/render";
 import { ListIndex } from "./ListIndex";
+
+// 検索の呼び出しを数えるため、searchChecklists だけ差し替えられるようにする（既定は本物を呼ぶ）
+vi.mock("@/domain/checklists", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/domain/checklists")>();
+  return { ...actual, searchChecklists: vi.fn(actual.searchChecklists) };
+});
 
 const item = (id: string, checked: boolean): ChecklistItem => ({
   id,
@@ -156,5 +163,106 @@ describe("ListIndex のエラー状態", () => {
     expect(await screen.findByText("データを保存できない環境です")).toBeInTheDocument();
     expect(screen.getByText(/プライベートブラウズ/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "再試行" })).not.toBeInTheDocument();
+  });
+});
+
+describe("ListIndex の検索", () => {
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    vi.mocked(searchChecklists).mockClear();
+    await db.checklists.clear();
+  });
+
+  const seed = () =>
+    db.checklists.bulkPut([
+      makeChecklist({
+        id: "release",
+        title: "リリース手順",
+        updatedAt: "2026-10-03T00:00:00.000Z",
+        items: [item("r1", false)],
+      }),
+      makeChecklist({
+        id: "travel",
+        title: "旅行の持ち物",
+        updatedAt: "2026-10-02T00:00:00.000Z",
+        items: [{ ...item("t1", false), title: "パスポート" }],
+      }),
+    ]);
+
+  const titles = () =>
+    within(screen.getByRole("list", { name: "チェックリスト一覧" }))
+      .getAllByRole("heading")
+      .map((h) => h.textContent);
+
+  it("検索ボックス（type=search）を出し、入力をデバウンスして検索する", async () => {
+    await seed();
+    const user = userEvent.setup();
+    renderWithRouter(<ListIndex />);
+    const box = await screen.findByRole("searchbox", { name: "検索" });
+    expect(box).toHaveAttribute("placeholder", "リストや項目を検索");
+    vi.mocked(searchChecklists).mockClear();
+
+    await user.type(box, "リリース手順");
+
+    // 150ms の境界と入力ごとのリセットは useDebouncedValue.test.ts でフェイクタイマーにより確かめる。
+    // ここでは、入力の直後には検索せず、待った後に最後の値で検索して結果が出ることを確かめる
+    expect(searchChecklists).not.toHaveBeenCalledWith("リリース手順", []);
+    await waitFor(() => expect(searchChecklists).toHaveBeenLastCalledWith("リリース手順", []));
+    await waitFor(() => expect(titles()).toEqual(["リリース手順"]));
+  });
+
+  it("項目名の一致でも表示する。一致がなければ検索語つきの文言を出す", async () => {
+    await seed();
+    const user = userEvent.setup();
+    renderWithRouter(<ListIndex />);
+    const box = await screen.findByRole("searchbox", { name: "検索" });
+
+    await user.type(box, "パスポート");
+    await waitFor(() => expect(titles()).toEqual(["旅行の持ち物"]));
+
+    await user.clear(box);
+    await user.type(box, "存在しない");
+    expect(
+      await screen.findByText("「存在しない」に一致するリストはありません"),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "チェックリスト一覧" })).not.toBeInTheDocument();
+  });
+
+  it("クリアボタンで検索語を消すと全件に戻り、フォーカスは検索ボックスに移る", async () => {
+    await seed();
+    const user = userEvent.setup();
+    renderWithRouter(<ListIndex />);
+    const box = await screen.findByRole("searchbox", { name: "検索" });
+    expect(screen.queryByRole("button", { name: "検索をクリア" })).not.toBeInTheDocument();
+
+    await user.type(box, "手順");
+    await waitFor(() => expect(titles()).toEqual(["リリース手順"]));
+    await user.click(screen.getByRole("button", { name: "検索をクリア" }));
+
+    expect(box).toHaveValue("");
+    expect(box).toHaveFocus();
+    await waitFor(() => expect(titles()).toEqual(["リリース手順", "旅行の持ち物"]));
+    expect(screen.queryByRole("button", { name: "検索をクリア" })).not.toBeInTheDocument();
+  });
+
+  it("検索結果は DB の変更に追従する", async () => {
+    await seed();
+    const user = userEvent.setup();
+    renderWithRouter(<ListIndex />);
+    await user.type(await screen.findByRole("searchbox", { name: "検索" }), "手順");
+    await waitFor(() => expect(titles()).toEqual(["リリース手順"]));
+
+    await db.checklists.put(
+      makeChecklist({ id: "new", title: "新しい手順", updatedAt: "2026-10-04T00:00:00.000Z" }),
+    );
+
+    await waitFor(() => expect(titles()).toEqual(["新しい手順", "リリース手順"]));
+  });
+
+  it("リストが 0 件の空状態では検索ボックスを出さない", async () => {
+    renderWithRouter(<ListIndex />);
+
+    await screen.findByText("まだチェックリストがありません");
+    expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
   });
 });
