@@ -80,8 +80,10 @@ function toErrors(issues: ValidationIssue[], rows: Row[]): Errors {
 export function ListEdit() {
   const { id } = useParams();
   if (id === undefined) return <ListEditor mode="new" />;
+  // 編集対象が変わったら読み込みと入力を作り直す（同じタブで別のリストの編集画面へ直接遷移した場合）
   return (
     <ErrorBoundary
+      key={id}
       fallback={(error, reset) => (
         <AppShell backTo={`/lists/${id}`}>
           <LoadErrorState error={error} onRetry={reset} />

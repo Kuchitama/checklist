@@ -428,6 +428,30 @@ describe("ListEdit（編集）", () => {
     expect(router.state.location.pathname).toBe("/lists/list/edit");
   });
 
+  it("編集中に別のリストの編集画面へ直接遷移すると、表示と保存先がそのリストに切り替わる", async () => {
+    await db.checklists.bulkPut([
+      existing(),
+      makeChecklist({
+        id: "other",
+        title: "別のリスト",
+        items: [makeItem({ id: "x", title: "別の項目" })],
+      }),
+    ]);
+    const { user, router } = await openEdit();
+    await screen.findByRole("heading", { name: "リストを編集" });
+    expect(titleInput()).toHaveValue("旅行の持ち物");
+
+    await act(() => router.navigate("/lists/other/edit"));
+
+    await waitFor(() => expect(titleInput()).toHaveValue("別のリスト"));
+    expect(itemInputs().map((i) => (i as HTMLInputElement).value)).toEqual(["別の項目"]);
+    await user.type(titleInput(), "！");
+    await user.click(saveButton());
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists/other"));
+    expect((await db.checklists.get("other"))?.title).toBe("別のリスト！");
+    expect((await db.checklists.get("list"))?.title).toBe("旅行の持ち物");
+  });
+
   it("存在しない id なら「見つかりません」と一覧への導線を出す", async () => {
     await openEdit("missing");
 
