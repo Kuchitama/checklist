@@ -24,3 +24,10 @@ if (!window.matchMedia) {
       dispatchEvent: () => false,
     }) as MediaQueryList;
 }
+
+// jsdom にはポインターキャプチャがない。vaul（ボトムシート）がドラッグ判定に使うため、何もしない代わりを置く
+for (const name of ["setPointerCapture", "releasePointerCapture", "hasPointerCapture"] as const) {
+  if (!Element.prototype[name]) {
+    Element.prototype[name] = (() => false) as never;
+  }
+}
