@@ -266,3 +266,137 @@ describe("ListIndex の検索", () => {
     expect(screen.queryByRole("searchbox")).not.toBeInTheDocument();
   });
 });
+
+describe("ListIndex のタグ絞り込み", () => {
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    vi.mocked(searchChecklists).mockClear();
+    await db.checklists.clear();
+  });
+
+  const seed = () =>
+    db.checklists.bulkPut([
+      makeChecklist({
+        id: "release",
+        title: "リリース手順",
+        tags: ["仕事", "りんご"],
+        updatedAt: "2026-10-03T00:00:00.000Z",
+      }),
+      makeChecklist({
+        id: "travel",
+        title: "旅行の持ち物",
+        tags: ["家", "apple"],
+        updatedAt: "2026-10-02T00:00:00.000Z",
+        items: [{ ...item("t1", false), title: "パスポート" }],
+      }),
+      makeChecklist({
+        id: "morning",
+        title: "朝のルーティン",
+        tags: ["家", "あんず", "Banana"],
+        updatedAt: "2026-10-01T00:00:00.000Z",
+      }),
+    ]);
+
+  const chips = () =>
+    within(screen.getByRole("group", { name: "タグで絞り込む" })).getAllByRole("button");
+  const chip = (name: string) =>
+    within(screen.getByRole("group", { name: "タグで絞り込む" })).getByRole("button", { name });
+  const titles = () =>
+    within(screen.getByRole("list", { name: "チェックリスト一覧" }))
+      .getAllByRole("heading")
+      .map((h) => h.textContent);
+
+  it("存在するタグを重複なく、英字 → かなの順（ja の照合）で並べる。選択は aria-pressed で示す", async () => {
+    await seed();
+    renderWithRouter(<ListIndex />);
+
+    await screen.findByRole("group", { name: "タグで絞り込む" });
+
+    expect(chips().map((b) => b.textContent)).toEqual([
+      "apple",
+      "Banana",
+      "あんず",
+      "りんご",
+      "家",
+      "仕事",
+    ]);
+    for (const b of chips()) expect(b).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("タグを選ぶとそのタグを持つリストだけになり、複数選択は AND。もう一度押すと解除", async () => {
+    await seed();
+    const user = userEvent.setup();
+    renderWithRouter(<ListIndex />);
+    await screen.findByRole("group", { name: "タグで絞り込む" });
+
+    await user.click(chip("家"));
+    expect(chip("家")).toHaveAttribute("aria-pressed", "true");
+    await waitFor(() => expect(titles()).toEqual(["旅行の持ち物", "朝のルーティン"]));
+
+    await user.click(chip("あんず"));
+    await waitFor(() => expect(titles()).toEqual(["朝のルーティン"]));
+    expect(searchChecklists).toHaveBeenLastCalledWith("", ["家", "あんず"]);
+
+    await user.click(chip("家"));
+    expect(chip("家")).toHaveAttribute("aria-pressed", "false");
+    await waitFor(() => expect(titles()).toEqual(["朝のルーティン"]));
+    await user.click(chip("あんず"));
+    await waitFor(() =>
+      expect(titles()).toEqual(["リリース手順", "旅行の持ち物", "朝のルーティン"]),
+    );
+  });
+
+  it("検索語と併用できる。0 件のときは検索語があればその文言、タグだけなら「選択したタグを持つリストはありません」", async () => {
+    await seed();
+    const user = userEvent.setup();
+    renderWithRouter(<ListIndex />);
+    await screen.findByRole("group", { name: "タグで絞り込む" });
+
+    await user.click(chip("家"));
+    await user.type(screen.getByRole("searchbox", { name: "検索" }), "パスポート");
+    await waitFor(() => expect(titles()).toEqual(["旅行の持ち物"]));
+    expect(searchChecklists).toHaveBeenLastCalledWith("パスポート", ["家"]);
+
+    await user.click(chip("仕事"));
+    expect(
+      await screen.findByText("「パスポート」に一致するリストはありません"),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "検索をクリア" }));
+    expect(await screen.findByText("選択したタグを持つリストはありません")).toBeInTheDocument();
+    // 0 件でもチップ列は残り、選び直せる
+    expect(chip("仕事")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("タグが 0 個なら列ごと出さない", async () => {
+    await db.checklists.put(makeChecklist({ id: "a", title: "タグなし" }));
+    renderWithRouter(<ListIndex />);
+
+    await screen.findByRole("list", { name: "チェックリスト一覧" });
+
+    expect(screen.queryByRole("group", { name: "タグで絞り込む" })).not.toBeInTheDocument();
+  });
+
+  it("選択中のタグがリストの編集で消えたら、チップ列から消え、選択も解除される", async () => {
+    await seed();
+    const user = userEvent.setup();
+    renderWithRouter(<ListIndex />);
+    await screen.findByRole("group", { name: "タグで絞り込む" });
+    await user.click(chip("あんず"));
+    await waitFor(() => expect(titles()).toEqual(["朝のルーティン"]));
+
+    await db.checklists.update("morning", { tags: ["家", "Banana"] });
+
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("group", { name: "タグで絞り込む" })).queryByRole("button", {
+          name: "あんず",
+        }),
+      ).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(titles()).toEqual(["リリース手順", "旅行の持ち物", "朝のルーティン"]),
+    );
+    expect(searchChecklists).toHaveBeenLastCalledWith("", []);
+  });
+});
