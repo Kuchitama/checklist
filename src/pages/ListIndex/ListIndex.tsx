@@ -79,7 +79,8 @@ function ListIndexContent() {
       <SearchBox value={query} onChange={setQuery} />
       {checklists.length === 0 ? (
         // 文言は画面設計書 6.3 節
-        <p className="py-12 text-center text-muted-foreground">
+        // 空白のない長い検索語（100 文字の英数字など）も途中で折り返し、横スクロールを出さない
+        <p className="py-12 text-center text-muted-foreground wrap-anywhere">
           {`「${trimmedQuery}」に一致するリストはありません`}
         </p>
       ) : (
