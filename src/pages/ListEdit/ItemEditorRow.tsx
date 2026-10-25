@@ -1,5 +1,5 @@
 import { ChevronRight, Trash2 } from "lucide-react";
-import type { KeyboardEvent } from "react";
+import { type KeyboardEvent, useRef } from "react";
 import { AutoTextarea } from "@/components/AutoTextarea";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,8 @@ export type ItemRowValue = {
   note: string;
   url: string | null;
   dueDate: string | null;
+  /** 日付欄に不正・未完成の入力が残っているか（ブラウザの validity.badInput。そのとき value は空）。保存を止めるために持つ */
+  dueDateInvalid: boolean;
   /** 「詳細」（メモ・URL・期限）を開いているか */
   expanded: boolean;
 };
@@ -48,6 +50,10 @@ export function ItemEditorRow({
   const errorId = (field: ItemField) => `${id(field)}-error`;
   const detailsId = `item-${rowKey}-details`;
   const described = (field: ItemField) => (errors[field] ? errorId(field) : undefined);
+  const dueRef = useRef<HTMLInputElement | null>(null);
+  // 未完成の入力のまま欄を離れても value は空のままなので、blur でも不正の有無を親へ伝える
+  const syncDue = (input: HTMLInputElement) =>
+    onChange({ dueDate: input.value || null, dueDateInvalid: input.validity.badInput });
 
   return (
     <li className="flex flex-col gap-1">
@@ -116,18 +122,26 @@ export function ItemEditorRow({
             <div className="flex items-center gap-1">
               <Input
                 id={id("dueDate")}
-                ref={(element) => registerRef("dueDate", element)}
+                ref={(element) => {
+                  dueRef.current = element;
+                  registerRef("dueDate", element);
+                }}
                 type="date"
                 aria-label={`項目 ${n} の期限`}
                 value={value.dueDate ?? ""}
                 aria-invalid={errors.dueDate ? true : undefined}
                 aria-describedby={described("dueDate")}
-                onChange={(event) => onChange({ dueDate: event.target.value || null })}
+                onChange={(event) => syncDue(event.target)}
+                onBlur={(event) => syncDue(event.target)}
               />
               <Button
                 variant="ghost"
                 aria-label={`項目 ${n} の期限をクリア`}
-                onClick={() => onChange({ dueDate: null })}
+                onClick={() => {
+                  // value が空のままだと React は DOM を書き換えないので、未完成の入力は直接消す
+                  if (dueRef.current) dueRef.current.value = "";
+                  onChange({ dueDate: null, dueDateInvalid: false });
+                }}
               >
                 クリア
               </Button>

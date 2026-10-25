@@ -54,7 +54,9 @@ function toInput(
     title,
     description,
     tags: commitTag(tags, tagDraft),
-    items: rows.map(({ key: _key, expanded: _expanded, ...item }) => item),
+    items: rows.map(
+      ({ key: _key, expanded: _expanded, dueDateInvalid: _dueDateInvalid, ...item }) => item,
+    ),
   };
 }
 
@@ -72,6 +74,7 @@ function rowsOf(checklist: Checklist): Row[] {
     note: item.note,
     url: item.url,
     dueDate: item.dueDate,
+    dueDateInvalid: false,
     // メモ・URL・期限のどれかに値があれば、初期状態で「詳細」を開く（画面設計書 3.3 節）
     expanded: item.note !== "" || item.url !== null || item.dueDate !== null,
   }));
@@ -193,7 +196,15 @@ function ListEditor(props: EditorProps) {
 
   const insertRow = (index: number) => {
     const key = crypto.randomUUID();
-    const row: Row = { key, title: "", note: "", url: null, dueDate: null, expanded: false };
+    const row: Row = {
+      key,
+      title: "",
+      note: "",
+      url: null,
+      dueDate: null,
+      dueDateInvalid: false,
+      expanded: false,
+    };
     setRows((current) => [...current.slice(0, index), row, ...current.slice(index)]);
     setFocusTarget({ key, field: "title" });
   };
@@ -241,6 +252,15 @@ function ListEditor(props: EditorProps) {
     }
   };
 
+  /**
+   * 日付欄に不正・未完成の入力が残っているか。欄が出ていればその時点のブラウザの判定を見る
+   * （「詳細」を閉じて開き直すと未完成の入力は消えるので、記録した旗だけで判定すると止まり続ける）
+   */
+  const hasBadDueInput = (row: Row) => {
+    const element = fieldRefs.current.get(`${row.key}:dueDate`);
+    return element instanceof HTMLInputElement ? element.validity.badInput : row.dueDateInvalid;
+  };
+
   const showIssues = (issues: ValidationIssue[]) => {
     const next = toErrors(issues, rows);
     setErrors(next);
@@ -255,6 +275,16 @@ function ListEditor(props: EditorProps) {
     if (draftProblem) {
       setErrors((current) => ({ ...current, tags: draftProblem }));
       tagRef.current?.focus();
+      return;
+    }
+    // 不正・未完成の日付（value は空）を期限なしとして保存しないよう、その欄にエラーを出して止める
+    const badDue = rows.filter(hasBadDueInput);
+    if (badDue.length > 0) {
+      const next: Errors = { rows: {} };
+      for (const row of badDue)
+        next.rows[row.key] = { dueDate: messageFor("invalid_date", "期限") };
+      setErrors(next);
+      focusFirstError(next);
       return;
     }
     const input = toInput(title, description, tags, tagDraft, rows);

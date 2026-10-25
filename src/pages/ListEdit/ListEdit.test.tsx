@@ -839,6 +839,58 @@ describe("ListEdit（項目の詳細）", () => {
     expect((await db.checklists.get("list"))?.items[0]).toMatchObject({ url: null, dueDate: null });
   });
 
+  /** ブラウザが不正・未完成の日付入力と判定している状態（value は空のまま）にする */
+  const markBadInput = (input: HTMLElement, badInput: boolean) =>
+    Object.defineProperty(input, "validity", { value: { badInput }, configurable: true });
+
+  it("日付欄に不正・未完成の入力が残っていれば、期限なしとして保存せずエラーを出してフォーカスする", async () => {
+    await db.checklists.put(
+      makeChecklist({ id: "list", items: [makeItem({ id: "a", title: "パスポート" })] }),
+    );
+    const user = userEvent.setup();
+    const { router } = renderApp(["/lists/list", "/lists/list/edit"]);
+    await screen.findByRole("heading", { name: "リストを編集" });
+    await user.click(detailsToggle(0));
+    markBadInput(dueInput(0), true);
+
+    await user.click(saveButton());
+
+    expect(await screen.findByText("存在する日付を入力してください")).toBeInTheDocument();
+    expect(dueInput(0)).toHaveAccessibleDescription("存在する日付を入力してください");
+    expect(dueInput(0)).toHaveFocus();
+    expect(updateChecklist).not.toHaveBeenCalled();
+    expect(router.state.location.pathname).toBe("/lists/list/edit");
+
+    // 「クリア」で不正な入力を消せば保存できる
+    await user.click(screen.getByRole("button", { name: "項目 1 の期限をクリア" }));
+    expect(screen.queryByText("存在する日付を入力してください")).not.toBeInTheDocument();
+    // ブラウザは value を空にすると badInput も消す。jsdom では判定を持たないので手で戻す
+    markBadInput(dueInput(0), false);
+    await user.click(saveButton());
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists/list"));
+  });
+
+  it("不正な日付入力のまま「詳細」を閉じても保存を止め、開いてその欄にフォーカスする", async () => {
+    await db.checklists.put(
+      makeChecklist({ id: "list", items: [makeItem({ id: "a", title: "パスポート" })] }),
+    );
+    const user = userEvent.setup();
+    renderApp(["/lists/list", "/lists/list/edit"]);
+    await screen.findByRole("heading", { name: "リストを編集" });
+    await user.click(detailsToggle(0));
+    markBadInput(dueInput(0), true);
+    fireEvent.blur(dueInput(0));
+    await user.click(detailsToggle(0));
+    expect(detailsToggle(0)).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(saveButton());
+
+    expect(await screen.findByText("存在する日付を入力してください")).toBeInTheDocument();
+    expect(detailsToggle(0)).toHaveAttribute("aria-expanded", "true");
+    expect(dueInput(0)).toHaveFocus();
+    expect(updateChecklist).not.toHaveBeenCalled();
+  });
+
   it("メモを変えると破棄確認の対象になる", async () => {
     await db.checklists.put(
       makeChecklist({ id: "list", items: [makeItem({ id: "a", title: "パスポート" })] }),
