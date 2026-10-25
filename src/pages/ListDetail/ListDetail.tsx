@@ -323,7 +323,8 @@ function ItemRow({ item, checked, today, onToggle }: ItemRowProps) {
       <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-start gap-3 py-3">
         <input
           type="checkbox"
-          className="mt-0.5 size-5 shrink-0 accent-primary"
+          // ブラウザ既定の outline の代わりに、他の部品と同じ --primary のリングを出す（画面設計書 8 章）
+          className="mt-0.5 size-5 shrink-0 accent-primary outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           checked={checked}
           aria-labelledby={titleId}
           aria-describedby={detailsId}

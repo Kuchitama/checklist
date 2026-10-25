@@ -68,10 +68,11 @@ describe("Import（読み込み画面）", () => {
     await openImport();
 
     expect(fileInput()).toHaveAttribute("accept", ".json,application/json");
-    // フォーカスは sr-only の input に当たるので、見えている label に peer でリングを出す
+    // フォーカスは sr-only の input に当たるので、見えている label に peer で --primary のリングを出す（画面設計書 8 章）
     expect(fileInput()).toHaveClass("peer");
     expect(screen.getByText("ファイルを選択", { selector: "label" })).toHaveClass(
-      "peer-focus-visible:ring-3",
+      "peer-focus-visible:ring-2",
+      "peer-focus-visible:ring-primary",
     );
     expect(
       screen.getByText("このアプリで書き出した .json ファイルを読み込めます"),
