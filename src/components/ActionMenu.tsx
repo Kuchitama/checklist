@@ -58,6 +58,8 @@ export function ActionMenu({ label = "操作メニュー", items }: Props) {
           {items.map((item) => (
             <DropdownMenuItem
               key={item.label}
+              // shadcn の既定は約 27px。タップ領域 44px（画面設計書 2.1 節）に合わせる
+              className="min-h-11"
               variant={item.danger ? "destructive" : "default"}
               onSelect={() => {
                 selected.current = true;
