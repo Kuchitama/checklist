@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { getChecklist, toggleItem } from "@/domain/checklists";
 import type { Checklist, ChecklistItem } from "@/domain/types";
 import { type DueState, dueState, formatDateTime, formatDueDate } from "@/lib/date";
+import { useToday } from "@/lib/useToday";
 
 /**
  * 詳細画面（画面設計書 3.2 節、仕様書 5.2 節）。項目の表示とチェック・解除を行う。
@@ -137,6 +138,7 @@ function useOptimisticToggle(checklist: Checklist) {
 
 function ChecklistView({ checklist }: { checklist: Checklist }) {
   const { isChecked, toggle } = useOptimisticToggle(checklist);
+  const today = useToday();
   const done = checklist.items.filter(isChecked).length;
 
   return (
@@ -168,6 +170,7 @@ function ChecklistView({ checklist }: { checklist: Checklist }) {
               key={item.id}
               item={item}
               checked={isChecked(item)}
+              today={today}
               onToggle={(checked) => toggle(item.id, checked)}
             />
           ))}
@@ -187,6 +190,8 @@ type ItemRowProps = {
   item: ChecklistItem;
   /** 楽観更新を反映した表示上の状態 */
   checked: boolean;
+  /** 期限の状態を判定する基準日（端末のローカル日付） */
+  today: Date;
   onToggle: (checked: boolean) => void;
 };
 
@@ -194,10 +199,10 @@ type ItemRowProps = {
  * 詳細の項目行（画面設計書 3.2 節、4 章の ChecklistItemRow）。
  * 行全体を label にしてチェックの切り替え領域にする。リンクアイコンは label の外に置き、押してもチェックが変わらないようにする。
  */
-function ItemRow({ item, checked, onToggle }: ItemRowProps) {
+function ItemRow({ item, checked, today, onToggle }: ItemRowProps) {
   const titleId = useId();
   const detailsId = useId();
-  const due = dueState(item.dueDate, checked);
+  const due = dueState(item.dueDate, checked, today);
   // 楽観更新中は DB の checkedAt がまだないことがある。そのときは完了日時の行を出さない
   const completedAt = checked ? item.checkedAt : null;
 
@@ -229,7 +234,7 @@ function ItemRow({ item, checked, onToggle }: ItemRowProps) {
             )}
             {item.dueDate && due && (
               <span className={DUE_LABEL[due].className}>
-                {`${DUE_LABEL[due].text} ${formatDueDate(item.dueDate)}`}
+                {`${DUE_LABEL[due].text} ${formatDueDate(item.dueDate, today)}`}
               </span>
             )}
           </span>

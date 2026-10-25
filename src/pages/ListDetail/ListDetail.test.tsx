@@ -208,6 +208,28 @@ describe("ListDetail", () => {
     expect(screen.getByText(`期限 ${shown(future)}`)).toBeInTheDocument();
   });
 
+  it("開いたまま日付が変わったら、期限の状態を表示し直す", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 23, 23, 0, 0));
+    await db.checklists.put(
+      makeChecklist({
+        id: "list",
+        items: [makeItem({ id: "a", title: "告知を出す", dueDate: "2026-10-23" })],
+      }),
+    );
+    try {
+      await openDetail();
+      expect(await screen.findByText("● 今日 10/23")).toBeInTheDocument();
+
+      vi.setSystemTime(new Date(2026, 9, 24, 7, 0, 0));
+      act(() => document.dispatchEvent(new Event("visibilitychange")));
+
+      expect(await screen.findByText("⚠ 期限超過 10/23")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("チェックは押した直後に表示と進捗へ反映し、連打しても最後に押した状態を保ってから DB の値に合流する", async () => {
     await db.checklists.put(
       makeChecklist({ id: "list", items: [makeItem({ id: "a", title: "パスポート" })] }),
