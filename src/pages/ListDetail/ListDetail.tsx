@@ -105,6 +105,7 @@ function ListDetailContent({ id }: { id: string }) {
               {
                 label: "リセット",
                 icon: <RotateCcw aria-hidden="true" />,
+                opensDialog: true,
                 onSelect: () => setConfirming("reset"),
               },
               {
@@ -116,6 +117,7 @@ function ListDetailContent({ id }: { id: string }) {
                 label: "削除",
                 icon: <Trash2 aria-hidden="true" />,
                 danger: true,
+                opensDialog: true,
                 onSelect: () => setConfirming("delete"),
               },
             ]}

@@ -680,6 +680,37 @@ describe("ListDetail の書き出し", () => {
     expect(captured.revoked).toEqual(["blob:mock"]);
   });
 
+  it("書き出した後はフォーカスが「操作メニュー」に戻る（ボトムシート）", async () => {
+    await seed();
+    const { user } = await openDetail();
+    const menuButton = await screen.findByRole("button", { name: "操作メニュー" });
+    await user.click(menuButton);
+
+    await user.click(await screen.findByRole("button", { name: "書き出し" }));
+
+    await screen.findByText("ファイルを書き出しました");
+    await waitFor(() => expect(menuButton).toHaveFocus());
+  });
+
+  it("書き出した後はフォーカスが「操作メニュー」に戻る（ドロップダウン）", async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = (query: string) =>
+      ({ ...originalMatchMedia(query), matches: query === "(min-width: 640px)" }) as MediaQueryList;
+    try {
+      await seed();
+      const { user } = await openDetail();
+      const menuButton = await screen.findByRole("button", { name: "操作メニュー" });
+      await user.click(menuButton);
+
+      await user.click(await screen.findByRole("menuitem", { name: "書き出し" }));
+
+      await screen.findByText("ファイルを書き出しました");
+      await waitFor(() => expect(menuButton).toHaveFocus());
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
   it("読み取りに失敗したらトーストで知らせ、ダウンロードしない", async () => {
     await seed();
     vi.mocked(exportChecklist).mockRejectedValueOnce(new Error("読み取り失敗"));
