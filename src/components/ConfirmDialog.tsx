@@ -85,6 +85,8 @@ function ConfirmDialogBody({
 
   return (
     <AlertDialogContent
+      // 本文の id を自前にしたので、Radix が自動で付ける aria-describedby も同じ id に向ける
+      aria-describedby={messageId}
       onOpenAutoFocus={(event) => {
         if (confirmInput === undefined) return;
         // 既定（キャンセルにフォーカス）の代わりに入力欄へ渡す（画面設計書 8 章）

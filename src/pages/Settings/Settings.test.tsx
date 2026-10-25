@@ -132,14 +132,14 @@ describe("Settings", () => {
 
       await user.click(screen.getByRole("button", { name: "全データを削除" }));
       expect(dialog()).toHaveAccessibleName("すべてのデータを削除しますか？");
-      expect(
-        within(dialog()).getByText(
-          "すべてのチェックリストと設定を削除します。この操作は取り消せません。",
-        ),
-      ).toBeInTheDocument();
+      // 本文はダイアログの説明として読み上げられる（aria-describedby）
+      expect(dialog()).toHaveAccessibleDescription(
+        "すべてのチェックリストと設定を削除します。この操作は取り消せません。",
+      );
       await user.click(within(dialog()).getByRole("button", { name: "次へ" }));
 
       await waitFor(() => expect(dialog()).toHaveAccessibleName("確認"));
+      expect(dialog()).toHaveAccessibleDescription("確認のため「削除」と入力してください。");
       const input = within(dialog()).getByRole("textbox", {
         name: "確認のため「削除」と入力してください。",
       });
