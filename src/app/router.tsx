@@ -1,4 +1,5 @@
 import { createHashRouter, type RouteObject } from "react-router";
+import { Import } from "@/pages/Import/Import";
 import { ListDetail } from "@/pages/ListDetail/ListDetail";
 import { ListEdit } from "@/pages/ListEdit/ListEdit";
 import { ListIndex } from "@/pages/ListIndex/ListIndex";
@@ -17,6 +18,7 @@ export const routes: RouteObject[] = [
       { path: "lists/new", element: <ListEdit /> },
       { path: "lists/:id", element: <ListDetail /> },
       { path: "lists/:id/edit", element: <ListEdit /> },
+      { path: "import", element: <Import /> },
     ],
   },
 ];

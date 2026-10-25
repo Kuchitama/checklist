@@ -119,7 +119,7 @@ const LIST_FIELDS: Record<string, string> = {
 };
 
 /** path の末尾の文字列要素を、親に items があるかどうかと合わせて日本語にする */
-function fieldName(path: (string | number)[]): string | undefined {
+export function fieldName(path: (string | number)[]): string | undefined {
   const last = path.findLast((p): p is string => typeof p === "string");
   if (last === undefined) return undefined;
   const underItems = path.slice(0, path.lastIndexOf(last)).includes("items");
