@@ -169,7 +169,7 @@ shadcn/ui のテーマトークンを CSS 変数として `src/index.css` に定
 │ ...                         │
 └────────────────────────────┘
 
-操作メニュー（⋯ を押すとボトムシート。720px ではドロップダウン）
+操作メニュー（⋯ を押すとボトムシート。幅 640px 以上ではドロップダウン）
 ┌────────────────────────────┐
 │ ↺ リセット                  │
 │ ⧉ 複製                      │
@@ -331,7 +331,7 @@ shadcn/ui のテーマトークンを CSS 変数として `src/index.css` に定
 | `ProgressBar` | `progress` |
 | `ChecklistItemRow` のチェックボックス | `checkbox` |
 | `ConfirmDialog` | `alert-dialog` |
-| `ActionMenu` | `dropdown-menu`（720px 以上）/ `drawer`（640px 未満のボトムシート） |
+| `ActionMenu` | `dropdown-menu`（640px 以上）/ `drawer`（640px 未満のボトムシート）。境界は 2.1 節のレイアウトと同じ |
 | `Toast` | `sonner` |
 | 設定のテーマ選択 | `radio-group` |
 | `DropZone`、`SortableList`、`TagInput`、`ItemEditorRow`、`EmptyState`、`ErrorState`、`AppShell`、`ThemeProvider` | 独自実装（shadcn に対応する部品がない） |
