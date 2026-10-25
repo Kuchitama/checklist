@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
 import { createChecklist, updateChecklist } from "@/domain/checklists";
+import { ChecklistValidationError } from "@/domain/errors";
+import { messageFor } from "@/domain/schema";
 import type { Checklist } from "@/domain/types";
 import { makeChecklist, makeItem } from "@/test/fixtures";
 import { renderApp } from "@/test/render";
@@ -425,6 +427,23 @@ describe("ListEdit（編集）", () => {
       await screen.findByText("保存できませんでした。空き容量を確認してください"),
     ).toBeInTheDocument();
     expect(titleInput()).toHaveValue("旅行の持ち物！");
+    expect(router.state.location.pathname).toBe("/lists/list/edit");
+  });
+
+  it("保存時に項目の id が不正（別の画面で消された項目）なら、その行のタイトルにエラーを出して止める", async () => {
+    await db.checklists.put(existing());
+    const message = messageFor("unknown_id", undefined);
+    vi.mocked(updateChecklist).mockRejectedValueOnce(
+      new ChecklistValidationError([{ path: ["items", 1, "id"], code: "unknown_id", message }]),
+    );
+    const { user, router } = await openEdit();
+    await screen.findByRole("heading", { name: "リストを編集" });
+
+    await user.click(saveButton());
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(itemInput(1)).toHaveAccessibleDescription(message);
+    expect(itemInput(1)).toHaveFocus();
     expect(router.state.location.pathname).toBe("/lists/list/edit");
   });
 

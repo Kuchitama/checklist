@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { createChecklist, getChecklist, updateChecklist } from "@/domain/checklists";
 import { ChecklistValidationError } from "@/domain/errors";
 import { normalizeChecklistInput } from "@/domain/normalize";
-import { validateChecklistInput } from "@/domain/schema";
+import { messageFor, validateChecklistInput } from "@/domain/schema";
 import type { Checklist, ChecklistInput, ValidationIssue } from "@/domain/types";
 import { ItemEditorRow, type ItemField, type ItemRowValue } from "./ItemEditorRow";
 
@@ -87,7 +87,8 @@ function toErrors(issues: ValidationIssue[], rows: Row[]): Errors {
     else if (field === "tags") errors.tags ??= issue.message;
     else if (field === "items" && typeof index === "number") {
       const key = rows[index]?.key;
-      const itemField = issue.path[2];
+      // id の不正（別の画面で消された項目など。データ設計書 4.1 節）は入力欄がないので、その行のタイトルに出す
+      const itemField = issue.path[2] === "id" ? "title" : issue.path[2];
       if (key && typeof itemField === "string" && ITEM_FIELDS.includes(itemField as ItemField)) {
         errors.rows[key] ??= {};
         errors.rows[key][itemField as ItemField] ??= issue.message;
