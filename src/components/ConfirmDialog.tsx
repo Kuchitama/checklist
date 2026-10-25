@@ -127,6 +127,9 @@ function ConfirmDialogBody({
       {confirmInput !== undefined && (
         <Input
           ref={inputRef}
+          // 既定の枠 --input は白で約 1.26:1 と、操作部品の輪郭に必要な 3:1 を満たさない（画面設計書 2.2 節）。
+          // --muted-foreground はライト 4.73:1、ダーク 7.63:1。アプリ全体の統一は Issue #72
+          className="border-muted-foreground"
           aria-labelledby={messageId}
           autoComplete="off"
           disabled={busy}
