@@ -194,7 +194,7 @@ describe("ListIndex の検索", () => {
       .getAllByRole("heading")
       .map((h) => h.textContent);
 
-  it("検索ボックス（type=search）を出し、入力を 150ms デバウンスして最後の値だけで検索する", async () => {
+  it("検索ボックス（type=search）を出し、入力をデバウンスして検索する", async () => {
     await seed();
     const user = userEvent.setup();
     renderWithRouter(<ListIndex />);
@@ -202,15 +202,12 @@ describe("ListIndex の検索", () => {
     expect(box).toHaveAttribute("placeholder", "リストや項目を検索");
     vi.mocked(searchChecklists).mockClear();
 
-    // 1 文字ずつ素早く打つ（各キーの間隔は 150ms より短い）
-    const typed = Date.now();
     await user.type(box, "リリース手順");
-    expect(searchChecklists).not.toHaveBeenCalled();
 
-    await waitFor(() => expect(searchChecklists).toHaveBeenCalled());
-    expect(Date.now() - typed).toBeGreaterThanOrEqual(150);
-    // 中間の値（「リ」「リリ」…）では検索せず、最後の値だけで 1 回検索する
-    expect(vi.mocked(searchChecklists).mock.calls).toEqual([["リリース手順", []]]);
+    // 150ms の境界と入力ごとのリセットは useDebouncedValue.test.ts でフェイクタイマーにより確かめる。
+    // ここでは、入力の直後には検索せず、待った後に最後の値で検索して結果が出ることを確かめる
+    expect(searchChecklists).not.toHaveBeenCalledWith("リリース手順", []);
+    await waitFor(() => expect(searchChecklists).toHaveBeenLastCalledWith("リリース手順", []));
     await waitFor(() => expect(titles()).toEqual(["リリース手順"]));
   });
 
