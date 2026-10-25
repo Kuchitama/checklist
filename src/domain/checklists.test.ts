@@ -9,6 +9,7 @@ import {
   repeat,
 } from "@/test/fixtures";
 import {
+  clearAllData,
   createChecklist,
   deleteChecklist,
   duplicateChecklist,
@@ -23,6 +24,7 @@ import {
 } from "./checklists";
 import { ChecklistNotFoundError, ChecklistValidationError } from "./errors";
 import { cpLength, exportFileV1Schema } from "./schema";
+import { SETTINGS_KEY } from "./settings";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -731,5 +733,25 @@ describe("searchChecklists（データ設計書 4.3 節）", () => {
     });
     await expect(searchChecklists("a", [])).rejects.toBeInstanceOf(DOMException);
     vi.restoreAllMocks();
+  });
+});
+
+describe("clearAllData", () => {
+  afterEach(async () => {
+    await db.checklists.clear();
+    localStorage.clear();
+  });
+
+  it("リストをすべて削除し、localStorage の設定も消す", async () => {
+    await db.checklists.bulkPut([makeChecklist({ id: "a" }), makeChecklist({ id: "b" })]);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ version: 1, theme: "dark" }));
+    await clearAllData();
+    expect(await db.checklists.count()).toBe(0);
+    expect(localStorage.getItem(SETTINGS_KEY)).toBeNull();
+  });
+
+  it("リストが 0 件でも成功する", async () => {
+    await expect(clearAllData()).resolves.toBeUndefined();
+    expect(await db.checklists.count()).toBe(0);
   });
 });
