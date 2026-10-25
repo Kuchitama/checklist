@@ -18,7 +18,7 @@ body:
     id: acceptance
     attributes:
       label: 受け入れ基準
-      description: 検証可能な箇条書き。1 行 1 基準。単体テストや E2E で確認する方法を添える
+      description: 検証可能な箇条書き。1 行 1 基準。単体テストや E2E で確認する方法を添える。設計書の「状態」の表（空・エラー・ローディング）を写す。「本 Issue では〜だけを置く」のような義務は、対象外ではなくここに書く
       placeholder: |
         - [ ] 一覧画面にリストのタイトルが updatedAt 降順で表示される（単体テスト: ListIndex.test.tsx）
         - [ ] リストが 0 件のとき空状態の文言が表示される
