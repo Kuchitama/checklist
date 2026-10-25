@@ -1,5 +1,5 @@
 import { ExternalLink, Trash2 } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useTheme } from "@/app/ThemeProvider";
@@ -31,6 +31,8 @@ export function Settings() {
   // 全データ削除の確認の段階（画面設計書 5.2 節の「全データ削除 1」「全データ削除 2」）
   const [step, setStep] = useState<1 | 2 | null>(null);
   const [deleting, setDeleting] = useState(false);
+  // 確認を閉じたらフォーカスを戻す起点（画面設計書 8 章）
+  const deleteButtonRef = useRef<HTMLButtonElement | null>(null);
 
   const remove = async () => {
     if (deleting) return;
@@ -81,7 +83,7 @@ export function Settings() {
           <p className="text-muted-foreground">
             データはこのブラウザの中にだけ保存されています。大切なリストは書き出して保管してください。
           </p>
-          <Button variant="destructive" onClick={() => setStep(1)}>
+          <Button ref={deleteButtonRef} variant="destructive" onClick={() => setStep(1)}>
             <Trash2 aria-hidden="true" />
             全データを削除
           </Button>
@@ -113,6 +115,7 @@ export function Settings() {
         message="すべてのチェックリストと設定を削除します。この操作は取り消せません。"
         confirmLabel="次へ"
         danger
+        returnFocusTo={deleteButtonRef}
         onConfirm={() => setStep(2)}
         onCancel={() => setStep(null)}
       />
@@ -123,6 +126,7 @@ export function Settings() {
         confirmLabel="削除"
         danger
         confirmInput="削除"
+        returnFocusTo={deleteButtonRef}
         onConfirm={remove}
         onCancel={() => setStep(null)}
       />

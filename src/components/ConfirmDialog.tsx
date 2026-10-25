@@ -1,4 +1,4 @@
-import { type KeyboardEvent, useId, useRef, useState } from "react";
+import { type KeyboardEvent, type RefObject, useId, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,6 +20,11 @@ type Props = {
   danger?: boolean;
   /** 渡すと入力欄を出し、この文字列と完全に一致するまで確定できない（全データ削除の 2 段階目） */
   confirmInput?: string;
+  /**
+   * 閉じたときにフォーカスを戻す要素。AlertDialogTrigger を使わずに開く（起点がボタン以外や、2 段階の確認）ときに渡す。
+   * 渡さなければ Radix の既定（トリガーがなければ body）
+   */
+  returnFocusTo?: RefObject<HTMLElement | null>;
   onConfirm: () => void;
   /** キャンセルボタン、Esc、外側の操作で閉じたときに呼ぶ */
   onCancel: () => void;
@@ -37,6 +42,7 @@ export function ConfirmDialog({
   confirmLabel,
   danger,
   confirmInput,
+  returnFocusTo,
   onConfirm,
   onCancel,
 }: Props) {
@@ -55,6 +61,7 @@ export function ConfirmDialog({
           confirmLabel={confirmLabel}
           danger={danger}
           confirmInput={confirmInput}
+          returnFocusTo={returnFocusTo}
           onConfirm={onConfirm}
         />
       )}
@@ -68,6 +75,7 @@ function ConfirmDialogBody({
   confirmLabel,
   danger,
   confirmInput,
+  returnFocusTo,
   onConfirm,
 }: Omit<Props, "open" | "onCancel">) {
   const [value, setValue] = useState("");
@@ -92,6 +100,12 @@ function ConfirmDialogBody({
         // 既定（キャンセルにフォーカス）の代わりに入力欄へ渡す（画面設計書 8 章）
         event.preventDefault();
         inputRef.current?.focus();
+      }}
+      onCloseAutoFocus={(event) => {
+        // 閉じたら起点へ戻す（画面設計書 8 章）。2 段階目へ進むときは、続けて開く 2 段階目が入力欄へ移す
+        if (!returnFocusTo?.current) return;
+        event.preventDefault();
+        returnFocusTo.current.focus();
       }}
     >
       <AlertDialogHeader>

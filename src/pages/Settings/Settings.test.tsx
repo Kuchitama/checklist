@@ -206,11 +206,14 @@ describe("Settings", () => {
       await user.click(screen.getByRole("button", { name: "全データを削除" }));
       await user.click(within(dialog()).getByRole("button", { name: "キャンセル" }));
       await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      // 閉じたらフォーカスは起点のボタンへ戻る（画面設計書 8 章）
+      expect(screen.getByRole("button", { name: "全データを削除" })).toHaveFocus();
 
       const input = await openSecondStep(user);
       await user.type(input, "削除");
       await user.keyboard("{Escape}");
       await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(screen.getByRole("button", { name: "全データを削除" })).toHaveFocus();
 
       expect(clearAllData).not.toHaveBeenCalled();
       expect(await db.checklists.count()).toBe(1);
@@ -245,6 +248,7 @@ describe("Settings", () => {
       await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
       expect(router.state.location.pathname).toBe("/settings");
       expect(await db.checklists.count()).toBe(1);
+      expect(screen.getByRole("button", { name: "全データを削除" })).toHaveFocus();
     });
   });
 
