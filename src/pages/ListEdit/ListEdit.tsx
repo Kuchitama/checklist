@@ -1,54 +1,62 @@
+import { useLiveQuery } from "dexie-react-hooks";
 import { Plus, Trash2 } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
-import { useBlocker, useNavigate } from "react-router";
+import { useBlocker, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { LoadErrorState } from "@/components/LoadErrorState";
+import { NotFoundState } from "@/components/NotFoundState";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createChecklist } from "@/domain/checklists";
+import { createChecklist, getChecklist, updateChecklist } from "@/domain/checklists";
 import { ChecklistValidationError } from "@/domain/errors";
 import { normalizeChecklistInput } from "@/domain/normalize";
 import { validateChecklistInput } from "@/domain/schema";
-import type { ChecklistInput, ValidationIssue } from "@/domain/types";
+import type { Checklist, ChecklistInput, ValidationIssue } from "@/domain/types";
 
-/** 項目の行。key は React の描画とフォーカス移動のための画面内だけの識別子 */
-type Row = { key: string; title: string };
+/**
+ * 項目の行。key は React の描画とフォーカス移動のための画面内だけの識別子。
+ * id は既存項目だけが持つ（保存時にチェック状態を引き継ぐ。データ設計書 4.1 節）。
+ * note / url / dueDate は入力欄ができるまで、読み込んだ値をそのまま保って保存する。
+ */
+type Row = {
+  key: string;
+  id?: string;
+  title: string;
+  note: string;
+  url: string | null;
+  dueDate: string | null;
+};
 
 /** 入力欄ごとのエラー文言。項目は行の key で引く（行の追加・削除で位置がずれても対応が崩れない） */
 type Errors = { title?: string; items?: string; rows: Record<string, string> };
 
 const NO_ERRORS: Errors = { rows: {} };
 
-/** 新規作成は空の入力から始める（画面設計書 7.1 節） */
-const INITIAL_INPUT = toInput("", []);
+/** タイトルと項目以外の入力欄はまだないので、読み込んだ値（新規は空）をそのまま保つ */
+type Base = Pick<ChecklistInput, "description" | "tags">;
 
-/** 説明・タグ・メモ・URL・期限は M2 まで入力欄がないため、空の既定値で保存する */
-function toInput(title: string, rows: Row[]): ChecklistInput {
+function toInput(title: string, rows: Row[], base: Base): ChecklistInput {
   return {
     title,
-    description: "",
-    tags: [],
-    items: rows.map((row) => ({ title: row.title, note: "", url: null, dueDate: null })),
+    description: base.description,
+    tags: base.tags,
+    items: rows.map(({ key: _key, ...item }) => item),
   };
 }
 
-/** 「変更あり」は正規化後の入力を初期値と比べて判定する（画面設計書 7.1 節） */
-function isChanged(input: ChecklistInput): boolean {
-  return (
-    JSON.stringify(normalizeChecklistInput(input)) !==
-    JSON.stringify(normalizeChecklistInput(INITIAL_INPUT))
-  );
+function rowsOf(checklist: Checklist): Row[] {
+  return checklist.items.map((item) => ({
+    key: item.id,
+    id: item.id,
+    title: item.title,
+    note: item.note,
+    url: item.url,
+    dueDate: item.dueDate,
+  }));
 }
 
 /** 検証結果を入力欄ごとの文言に振り分ける。issues の項目の位置は保存しようとした時点の rows に対応する */
@@ -66,13 +74,53 @@ function toErrors(issues: ValidationIssue[], rows: Row[]): Errors {
 }
 
 /**
- * 新規作成画面（画面設計書 3.3 節、仕様書 5.3 節）。M1 ではタイトルと項目タイトルだけを入力する。
- * 既存リストの編集、説明・タグ・詳細の入力、並び替えは M2 で追加する。
+ * 新規作成（`#/lists/new`）と編集（`#/lists/:id/edit`）の画面（画面設計書 3.3 節、仕様書 5.3 節）。
+ * M2 のこの段階ではタイトルと項目タイトルを入力する。説明・タグ・項目の詳細・並び替えは後続の Issue で加える。
  */
 export function ListEdit() {
+  const { id } = useParams();
+  if (id === undefined) return <ListEditor mode="new" />;
+  return (
+    <ErrorBoundary
+      fallback={(error, reset) => (
+        <AppShell backTo={`/lists/${id}`}>
+          <LoadErrorState error={error} onRetry={reset} />
+        </AppShell>
+      )}
+    >
+      <ExistingListLoader id={id} />
+    </ErrorBoundary>
+  );
+}
+
+/** 既存リストを読み込んで編集画面に渡す。開いた時点の内容を初期値にし、編集中の購読更新では入力を上書きしない（7.1 節） */
+function ExistingListLoader({ id }: { id: string }) {
+  const checklist = useLiveQuery(async () => (await getChecklist(id)) ?? null, [id]);
+  const initial = useRef<Checklist | null>(null);
+  if (checklist && !initial.current) initial.current = checklist;
+
+  if (initial.current) return <ListEditor mode="edit" checklist={initial.current} />;
+  return (
+    <AppShell backTo={`/lists/${id}`}>
+      {/* 読み込み中は本文を描画しない。IndexedDB の読み取りは 200ms 以内に終わる前提（画面設計書 2.1 節） */}
+      {checklist === null && <NotFoundState />}
+    </AppShell>
+  );
+}
+
+type EditorProps = { mode: "new" } | { mode: "edit"; checklist: Checklist };
+
+function ListEditor(props: EditorProps) {
   const navigate = useNavigate();
-  const [title, setTitle] = useState("");
-  const [rows, setRows] = useState<Row[]>([]);
+  const checklist = props.mode === "edit" ? props.checklist : null;
+  const base: Base = checklist ?? { description: "", tags: [] };
+  // 「変更あり」はこの初期値と比べて判定する（新規は空。画面設計書 7.1 節）
+  const initialInput = toInput(checklist?.title ?? "", checklist ? rowsOf(checklist) : [], base);
+  // キャンセルと「戻る」の行き先。新規は一覧、編集は詳細
+  const backTo = checklist ? `/lists/${checklist.id}` : "/";
+
+  const [title, setTitle] = useState(initialInput.title);
+  const [rows, setRows] = useState<Row[]>(() => (checklist ? rowsOf(checklist) : []));
   const [errors, setErrors] = useState<Errors>(NO_ERRORS);
   const [saving, setSaving] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -81,7 +129,9 @@ export function ListEdit() {
   // 保存に成功したら、詳細への遷移を破棄確認で止めない
   const saved = useRef(false);
 
-  const changed = isChanged(toInput(title, rows));
+  const changed =
+    JSON.stringify(normalizeChecklistInput(toInput(title, rows, base))) !==
+    JSON.stringify(normalizeChecklistInput(initialInput));
 
   // キャンセル、ヘッダーの「戻る」、ブラウザの戻る、リンク遷移のすべてで破棄確認を出す（画面設計書 7.1 節）
   const blocker = useBlocker(
@@ -106,7 +156,8 @@ export function ListEdit() {
 
   const insertRow = (index: number) => {
     const key = crypto.randomUUID();
-    setRows((current) => [...current.slice(0, index), { key, title: "" }, ...current.slice(index)]);
+    const row: Row = { key, title: "", note: "", url: null, dueDate: null };
+    setRows((current) => [...current.slice(0, index), row, ...current.slice(index)]);
     setFocusKey(key);
   };
 
@@ -149,7 +200,7 @@ export function ListEdit() {
 
   const save = async () => {
     if (saving) return;
-    const input = toInput(title, rows);
+    const input = toInput(title, rows, base);
     const issues = validateChecklistInput(normalizeChecklistInput(input));
     if (issues.length > 0) {
       showIssues(issues);
@@ -158,10 +209,12 @@ export function ListEdit() {
     setErrors(NO_ERRORS);
     setSaving(true);
     try {
-      const checklist = await createChecklist(input);
+      const result = checklist
+        ? await updateChecklist(checklist.id, input)
+        : await createChecklist(input);
       saved.current = true;
-      // 戻るで空の作成画面に戻らないよう、履歴を置き換える
-      navigate(`/lists/${checklist.id}`, { replace: true });
+      // 戻るで作成・編集画面に戻らないよう、履歴を置き換える
+      navigate(`/lists/${result.id}`, { replace: true });
     } catch (error) {
       setSaving(false);
       if (error instanceof ChecklistValidationError) {
@@ -174,8 +227,8 @@ export function ListEdit() {
 
   return (
     <AppShell
-      title="新しいリスト"
-      backTo="/"
+      title={checklist ? "リストを編集" : "新しいリスト"}
+      backTo={backTo}
       actions={
         <Button onClick={save} disabled={saving}>
           保存
@@ -247,30 +300,23 @@ export function ListEdit() {
           </Button>
         </section>
 
-        <Button variant="outline" className="self-start" onClick={() => navigate("/")}>
+        <Button variant="outline" className="self-start" onClick={() => navigate(backTo)}>
           キャンセル
         </Button>
       </div>
 
-      <AlertDialog
+      {/* 文言は画面設計書 5.2 節 */}
+      <ConfirmDialog
         open={blocker.state === "blocked"}
-        onOpenChange={(open) => {
-          if (!open && blocker.state === "blocked") blocker.reset();
+        title="変更を破棄しますか？"
+        message="保存していない変更は失われます。"
+        confirmLabel="破棄"
+        danger
+        onConfirm={() => blocker.proceed?.()}
+        onCancel={() => {
+          if (blocker.state === "blocked") blocker.reset();
         }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>変更を破棄しますか？</AlertDialogTitle>
-            <AlertDialogDescription>保存していない変更は失われます。</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>キャンセル</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={() => blocker.proceed?.()}>
-              破棄
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      />
     </AppShell>
   );
 }

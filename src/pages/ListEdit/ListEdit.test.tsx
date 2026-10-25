@@ -1,16 +1,21 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
-import { createChecklist } from "@/domain/checklists";
+import { createChecklist, updateChecklist } from "@/domain/checklists";
 import type { Checklist } from "@/domain/types";
-import { makeChecklist } from "@/test/fixtures";
+import { makeChecklist, makeItem } from "@/test/fixtures";
 import { renderApp } from "@/test/render";
 
 // 保存中の状態を作るため、createChecklist だけ差し替えられるようにする（既定は本物を呼ぶ）
 vi.mock("@/domain/checklists", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/domain/checklists")>();
-  return { ...actual, createChecklist: vi.fn(actual.createChecklist) };
+  return {
+    ...actual,
+    createChecklist: vi.fn(actual.createChecklist),
+    updateChecklist: vi.fn(actual.updateChecklist),
+  };
 });
 
 const titleInput = () => screen.getByRole("textbox", { name: /タイトル/ });
@@ -32,6 +37,7 @@ async function openNew() {
 
 describe("ListEdit（新規作成）", () => {
   afterEach(async () => {
+    toast.dismiss();
     vi.restoreAllMocks();
     vi.mocked(createChecklist).mockClear();
     await db.checklists.clear();
@@ -254,5 +260,208 @@ describe("ListEdit（新規作成）", () => {
     await user.type(titleInput(), "旅行の持ち物");
 
     expect(unload()).toBe(true);
+  });
+});
+
+describe("ListEdit（編集）", () => {
+  const existing = () =>
+    makeChecklist({
+      id: "list",
+      title: "旅行の持ち物",
+      description: "前回の反省",
+      tags: ["旅行"],
+      items: [
+        makeItem({
+          id: "a",
+          title: "パスポート",
+          checked: true,
+          checkedAt: "2026-10-02T00:00:00.000Z",
+        }),
+        makeItem({
+          id: "b",
+          title: "充電器",
+          note: "予備も",
+          url: "https://example.com/c",
+          dueDate: "2026-12-01",
+        }),
+      ],
+    });
+
+  /** 編集画面を開く。history は詳細 → 編集の順に積む */
+  async function openEdit(id = "list") {
+    const user = userEvent.setup();
+    const result = renderApp([`/lists/${id}`, `/lists/${id}/edit`]);
+    return { user, ...result };
+  }
+
+  afterEach(async () => {
+    // トーストはモジュール内に状態を持ち、次のテストの Toaster にも出るので消す
+    toast.dismiss();
+    vi.restoreAllMocks();
+    vi.mocked(updateChecklist).mockClear();
+    await db.checklists.clear();
+  });
+
+  it("ヘッダーに「リストを編集」と「保存」を出し、既存のタイトルと項目を初期値にする", async () => {
+    await db.checklists.put(existing());
+
+    await openEdit();
+
+    expect(await screen.findByRole("heading", { name: "リストを編集" })).toBeInTheDocument();
+    expect(saveButton()).toBeInTheDocument();
+    expect(titleInput()).toHaveValue("旅行の持ち物");
+    expect(itemInputs().map((i) => (i as HTMLInputElement).value)).toEqual([
+      "パスポート",
+      "充電器",
+    ]);
+    expect(screen.getByRole("link", { name: "戻る" })).toHaveAttribute("href", "/lists/list");
+  });
+
+  it("保存すると updateChecklist で更新し、詳細へ遷移する。チェック状態と入力欄のないフィールドは保たれる", async () => {
+    await db.checklists.put(existing());
+    const { user, router } = await openEdit();
+    await screen.findByRole("heading", { name: "リストを編集" });
+
+    await user.clear(itemInput(0));
+    await user.type(itemInput(0), "パスポート（更新）");
+    await user.click(screen.getByRole("button", { name: "項目 2 を削除" }));
+    await user.click(screen.getByRole("button", { name: "項目を追加" }));
+    await user.type(itemInput(1), "傘");
+    await user.click(saveButton());
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists/list"));
+    const stored = await db.checklists.get("list");
+    expect(stored).toMatchObject({
+      title: "旅行の持ち物",
+      description: "前回の反省",
+      tags: ["旅行"],
+    });
+    expect(stored?.items).toEqual([
+      {
+        id: "a",
+        title: "パスポート（更新）",
+        note: "",
+        url: null,
+        dueDate: null,
+        checked: true,
+        checkedAt: "2026-10-02T00:00:00.000Z",
+      },
+      expect.objectContaining({ title: "傘", checked: false, checkedAt: null }),
+    ]);
+    expect(await db.checklists.count()).toBe(1);
+  });
+
+  it("変更していない項目は、メモ・URL・期限を保ったまま保存する", async () => {
+    await db.checklists.put(existing());
+    const { user, router } = await openEdit();
+    await screen.findByRole("heading", { name: "リストを編集" });
+
+    await user.type(titleInput(), "！");
+    await user.click(saveButton());
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists/list"));
+    expect((await db.checklists.get("list"))?.items[1]).toEqual({
+      id: "b",
+      title: "充電器",
+      note: "予備も",
+      url: "https://example.com/c",
+      dueDate: "2026-12-01",
+      checked: false,
+      checkedAt: null,
+    });
+  });
+
+  it("変更がなければ「キャンセル」でそのまま詳細へ戻る", async () => {
+    await db.checklists.put(existing());
+    const { user, router } = await openEdit();
+    await screen.findByRole("heading", { name: "リストを編集" });
+
+    await user.click(screen.getByRole("button", { name: "キャンセル" }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists/list"));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("変更があれば「戻る」で破棄確認を出し、「破棄」で詳細へ戻る", async () => {
+    await db.checklists.put(existing());
+    const { user, router } = await openEdit();
+    await screen.findByRole("heading", { name: "リストを編集" });
+    await user.type(titleInput(), "！");
+
+    await user.click(screen.getByRole("link", { name: "戻る" }));
+
+    const dialog = await screen.findByRole("alertdialog", { name: "変更を破棄しますか？" });
+    expect(router.state.location.pathname).toBe("/lists/list/edit");
+    await user.click(within(dialog).getByRole("button", { name: "破棄" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists/list"));
+    expect((await db.checklists.get("list"))?.title).toBe("旅行の持ち物");
+  });
+
+  it("検証エラーは欄の直下に出して保存を止める", async () => {
+    await db.checklists.put(existing());
+    const { user } = await openEdit();
+    await screen.findByRole("heading", { name: "リストを編集" });
+
+    await user.clear(titleInput());
+    await user.click(saveButton());
+
+    expect(await screen.findByText("タイトルを入力してください")).toBeInTheDocument();
+    expect(titleInput()).toHaveFocus();
+    expect(updateChecklist).not.toHaveBeenCalled();
+  });
+
+  it("保存に失敗したらトーストを出し、入力を残す", async () => {
+    await db.checklists.put(existing());
+    vi.mocked(updateChecklist).mockRejectedValueOnce(
+      new DOMException("容量不足", "QuotaExceededError"),
+    );
+    const { user, router } = await openEdit();
+    await screen.findByRole("heading", { name: "リストを編集" });
+    await user.type(titleInput(), "！");
+
+    await user.click(saveButton());
+
+    expect(
+      await screen.findByText("保存できませんでした。空き容量を確認してください"),
+    ).toBeInTheDocument();
+    expect(titleInput()).toHaveValue("旅行の持ち物！");
+    expect(router.state.location.pathname).toBe("/lists/list/edit");
+  });
+
+  it("存在しない id なら「見つかりません」と一覧への導線を出す", async () => {
+    await openEdit("missing");
+
+    expect(await screen.findByText("リストが見つかりません")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "一覧へ" })).toHaveAttribute("href", "/");
+  });
+
+  it("読み取りに失敗したら案内と再試行ボタンを出し、再試行で読み直す", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await db.checklists.put(existing());
+    const get = vi.spyOn(db.checklists, "get").mockImplementation(() => {
+      throw new Error("一時的な読み取り失敗");
+    });
+    const { user } = await openEdit();
+
+    expect(await screen.findByText("リストを読み込めませんでした")).toBeInTheDocument();
+    get.mockRestore();
+    await user.click(screen.getByRole("button", { name: "再試行" }));
+
+    expect(await screen.findByRole("heading", { name: "リストを編集" })).toBeInTheDocument();
+    expect(titleInput()).toHaveValue("旅行の持ち物");
+  });
+
+  it("DB を開けない環境では保存できない旨を出し、再試行ボタンは出さない", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(db.checklists, "get").mockImplementation(() => {
+      const error = new Error("IndexedDB を開けません");
+      error.name = "OpenFailedError";
+      throw error;
+    });
+
+    await openEdit();
+
+    expect(await screen.findByText("データを保存できない環境です")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "再試行" })).not.toBeInTheDocument();
   });
 });
