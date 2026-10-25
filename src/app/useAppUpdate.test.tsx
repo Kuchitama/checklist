@@ -85,7 +85,7 @@ describe("useAppUpdate（更新通知）", () => {
     const toastElement = message.closest("[data-sonner-toast]") as HTMLElement;
     expect(toastElement).not.toBeNull();
     const reload = within(toastElement).getByRole("button", { name: "再読み込み" });
-    // 部品既定の半透明のリングではなく、不透明な --primary のリング（画面設計書 8 章）
+    // Button の既定で、不透明な --primary のリングが付く（画面設計書 8 章）
     expect(reload).toHaveClass("focus-visible:ring-primary", "focus-visible:ring-offset-2");
     await user.click(reload);
     await waitFor(() => expect(mocks.updateServiceWorker).toHaveBeenCalledTimes(1));

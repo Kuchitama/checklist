@@ -106,7 +106,7 @@ export function DropZone({ accept, busy = false, onFile }: Props) {
             htmlFor={inputId}
             className={cn(
               buttonVariants({ variant: "secondary" }),
-              "cursor-pointer peer-focus-visible:border-ring peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50",
+              "cursor-pointer peer-focus-visible:ring-2 peer-focus-visible:ring-primary peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background",
             )}
           >
             ファイルを選択
