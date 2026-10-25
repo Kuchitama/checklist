@@ -96,8 +96,15 @@ function ConfirmDialogBody({
   const matched = confirmInput === undefined || value === confirmInput;
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    // IME の変換確定の Enter では確定しない
-    if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+    // IME の変換確定の Enter では確定しない。Safari は compositionend が keydown より先に発火して
+    // isComposing が false になることがあるが、そのときは keyCode が 229（WebKit bug 165004）
+    if (
+      event.key !== "Enter" ||
+      event.nativeEvent.isComposing ||
+      event.nativeEvent.keyCode === 229
+    ) {
+      return;
+    }
     event.preventDefault();
     if (matched && !busy) onConfirm();
   };

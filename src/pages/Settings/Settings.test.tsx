@@ -194,6 +194,17 @@ describe("Settings", () => {
           new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true }),
         );
       });
+      // Safari では compositionend が先に発火して isComposing が false になり、keyCode が 229 で届く
+      act(() => {
+        input.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "Enter",
+            isComposing: false,
+            keyCode: 229,
+            bubbles: true,
+          }),
+        );
+      });
       expect(await db.checklists.count()).toBe(1);
       expect(dialog()).toBeInTheDocument();
     });
