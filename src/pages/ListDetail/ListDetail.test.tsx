@@ -1,9 +1,9 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
-import { deleteChecklist, resetChecklist, toggleItem } from "@/domain/checklists";
+import { deleteChecklist, exportChecklist, resetChecklist, toggleItem } from "@/domain/checklists";
 import { makeChecklist, makeItem } from "@/test/fixtures";
 import { renderApp } from "@/test/render";
 
@@ -15,6 +15,7 @@ vi.mock("@/domain/checklists", async (importOriginal) => {
     toggleItem: vi.fn(actual.toggleItem),
     resetChecklist: vi.fn(actual.resetChecklist),
     deleteChecklist: vi.fn(actual.deleteChecklist),
+    exportChecklist: vi.fn(actual.exportChecklist),
   };
 });
 
@@ -592,5 +593,134 @@ describe("ListDetail の操作メニュー", () => {
     ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe(path);
     expect(await db.checklists.get("list")).toBeDefined();
+  });
+});
+
+describe("ListDetail の書き出し", () => {
+  /** ダウンロードは jsdom では動かないので、Blob と a 要素のクリックを捕まえる */
+  const captured: { blob?: Blob; name?: string; revoked: string[] } = { revoked: [] };
+
+  beforeEach(() => {
+    captured.blob = undefined;
+    captured.name = undefined;
+    captured.revoked = [];
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      captured.blob = blob;
+      return "blob:mock";
+    });
+    URL.revokeObjectURL = vi.fn((url: string) => {
+      captured.revoked.push(url);
+    });
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      captured.name = this.download;
+    });
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 25, 12, 0, 0));
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    toast.dismiss();
+    vi.restoreAllMocks();
+    vi.mocked(exportChecklist).mockClear();
+    await db.checklists.clear();
+  });
+
+  const seed = () =>
+    db.checklists.put(
+      makeChecklist({
+        id: "list",
+        title: "リリース手順: v2",
+        tags: ["仕事"],
+        items: [
+          makeItem({
+            id: "a",
+            title: "CI を確認",
+            checked: true,
+            checkedAt: "2026-10-01T00:00:00.000Z",
+          }),
+          makeItem({ id: "b", title: "タグを打つ", url: "https://example.com/tag" }),
+        ],
+      }),
+    );
+
+  it("操作メニューに「書き出し」があり、選ぶと JSON をダウンロードしてトーストを出す", async () => {
+    await seed();
+    const { user } = await openDetail();
+    await user.click(await screen.findByRole("button", { name: "操作メニュー" }));
+
+    const sheet = await screen.findByRole("dialog", { name: "操作メニュー" });
+    const labels = within(sheet)
+      .getAllByRole("button")
+      .map((b) => b.textContent?.trim());
+    expect(labels).toEqual(["リセット", "書き出し", "削除", "キャンセル"]);
+    await user.click(within(sheet).getByRole("button", { name: "書き出し" }));
+
+    expect(await screen.findByText("ファイルを書き出しました")).toBeInTheDocument();
+    expect(captured.name).toBe("checklist-リリース手順__v2-20261025.json");
+    expect(captured.blob?.type).toBe("application/json");
+    const text = await captured.blob?.text();
+    expect(JSON.parse(text ?? "")).toEqual({
+      format: "checklist-export",
+      version: 1,
+      exportedAt: new Date(2026, 9, 25, 12, 0, 0).toISOString(),
+      checklist: {
+        title: "リリース手順: v2",
+        description: "",
+        tags: ["仕事"],
+        items: [
+          { title: "CI を確認", note: "", url: null, dueDate: null },
+          { title: "タグを打つ", note: "", url: "https://example.com/tag", dueDate: null },
+        ],
+      },
+    });
+    expect(text).not.toContain('"checked"');
+    expect(captured.revoked).toEqual(["blob:mock"]);
+  });
+
+  it("書き出した後はフォーカスが「操作メニュー」に戻る（ボトムシート）", async () => {
+    await seed();
+    const { user } = await openDetail();
+    const menuButton = await screen.findByRole("button", { name: "操作メニュー" });
+    await user.click(menuButton);
+
+    await user.click(await screen.findByRole("button", { name: "書き出し" }));
+
+    await screen.findByText("ファイルを書き出しました");
+    await waitFor(() => expect(menuButton).toHaveFocus());
+  });
+
+  it("書き出した後はフォーカスが「操作メニュー」に戻る（ドロップダウン）", async () => {
+    const originalMatchMedia = window.matchMedia;
+    window.matchMedia = (query: string) =>
+      ({ ...originalMatchMedia(query), matches: query === "(min-width: 640px)" }) as MediaQueryList;
+    try {
+      await seed();
+      const { user } = await openDetail();
+      const menuButton = await screen.findByRole("button", { name: "操作メニュー" });
+      await user.click(menuButton);
+
+      await user.click(await screen.findByRole("menuitem", { name: "書き出し" }));
+
+      await screen.findByText("ファイルを書き出しました");
+      await waitFor(() => expect(menuButton).toHaveFocus());
+    } finally {
+      window.matchMedia = originalMatchMedia;
+    }
+  });
+
+  it("読み取りに失敗したらトーストで知らせ、ダウンロードしない", async () => {
+    await seed();
+    vi.mocked(exportChecklist).mockRejectedValueOnce(new Error("読み取り失敗"));
+    const { user } = await openDetail();
+    await user.click(await screen.findByRole("button", { name: "操作メニュー" }));
+
+    await user.click(await screen.findByRole("button", { name: "書き出し" }));
+
+    expect(await screen.findByText("書き出せませんでした")).toBeInTheDocument();
+    expect(captured.name).toBeUndefined();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { useLiveQuery } from "dexie-react-hooks";
-import { ExternalLink, RotateCcw, Trash2 } from "lucide-react";
+import { Download, ExternalLink, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -13,14 +13,23 @@ import { NotFoundState } from "@/components/NotFoundState";
 import { ProgressBar } from "@/components/ProgressBar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { deleteChecklist, getChecklist, resetChecklist, toggleItem } from "@/domain/checklists";
+import {
+  deleteChecklist,
+  exportChecklist,
+  getChecklist,
+  resetChecklist,
+  serializeExportFile,
+  toggleItem,
+} from "@/domain/checklists";
 import type { Checklist, ChecklistItem } from "@/domain/types";
 import { type DueState, dueState, formatDateTime, formatDueDate } from "@/lib/date";
+import { downloadTextFile } from "@/lib/download";
+import { exportFileName } from "@/lib/exportFileName";
 import { useToday } from "@/lib/useToday";
 
 /**
- * 詳細画面（画面設計書 3.2 節、仕様書 5.2 節）。項目の表示とチェック・解除、リセット、削除を行う。
- * 「編集」ボタンは M2、操作メニューの複製は M4、書き出しは M3 で追加する。
+ * 詳細画面（画面設計書 3.2 節、仕様書 5.2 節）。項目の表示とチェック・解除、リセット、書き出し、削除を行う。
+ * 操作メニューの複製は M4 で追加する。
  */
 export function ListDetail() {
   const { id = "" } = useParams();
@@ -58,6 +67,21 @@ function ListDetailContent({ id }: { id: string }) {
     }
   };
 
+  // 書き出し（仕様書 4 章、FR-30・FR-31）。ファイル名はデータ設計書 5.4 節
+  const exportFile = async () => {
+    try {
+      const file = await exportChecklist(id);
+      downloadTextFile(
+        exportFileName(file.checklist.title),
+        serializeExportFile(file),
+        "application/json",
+      );
+      toast.success("ファイルを書き出しました", { duration: 3000 });
+    } catch {
+      toast.error("書き出せませんでした", { duration: 5000 });
+    }
+  };
+
   const remove = async () => {
     setConfirming(null);
     try {
@@ -81,12 +105,19 @@ function ListDetailContent({ id }: { id: string }) {
               {
                 label: "リセット",
                 icon: <RotateCcw aria-hidden="true" />,
+                opensDialog: true,
                 onSelect: () => setConfirming("reset"),
+              },
+              {
+                label: "書き出し",
+                icon: <Download aria-hidden="true" />,
+                onSelect: exportFile,
               },
               {
                 label: "削除",
                 icon: <Trash2 aria-hidden="true" />,
                 danger: true,
+                opensDialog: true,
                 onSelect: () => setConfirming("delete"),
               },
             ]}

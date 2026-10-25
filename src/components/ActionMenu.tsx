@@ -22,6 +22,8 @@ export type ActionMenuItem = {
   icon: ReactNode;
   /** 取り消せない操作（削除など）は赤で出す */
   danger?: boolean;
+  /** 選ぶと確認ダイアログを開く項目。閉じるときにトリガーへフォーカスを戻さず、ダイアログに受け渡す */
+  opensDialog?: boolean;
   onSelect: () => void;
 };
 
@@ -38,11 +40,12 @@ type Props = {
 export function ActionMenu({ label = "操作メニュー", items }: Props) {
   const wide = useMediaQuery("(min-width: 640px)");
   const [open, setOpen] = useState(false);
-  // 項目を選んで閉じたときは、トリガーへフォーカスを戻さない。続けて開く確認ダイアログがフォーカスを受け取る
-  const selected = useRef(false);
+  // 確認ダイアログを開く項目を選んで閉じたときだけ、トリガーへフォーカスを戻さない（ダイアログが受け取る）。
+  // それ以外（書き出しなど）やキャンセルでは、キーボード操作を続けられるようトリガーへ戻す
+  const handoff = useRef(false);
   const onCloseAutoFocus = (event: Event) => {
-    if (selected.current) event.preventDefault();
-    selected.current = false;
+    if (handoff.current) event.preventDefault();
+    handoff.current = false;
   };
   const trigger = (
     <Button variant="ghost" size="icon" aria-label={label}>
@@ -58,9 +61,11 @@ export function ActionMenu({ label = "操作メニュー", items }: Props) {
           {items.map((item) => (
             <DropdownMenuItem
               key={item.label}
+              // shadcn の既定は約 27px。タップ領域 44px（画面設計書 2.1 節）に合わせる
+              className="min-h-11"
               variant={item.danger ? "destructive" : "default"}
               onSelect={() => {
-                selected.current = true;
+                handoff.current = item.opensDialog === true;
                 item.onSelect();
               }}
             >
@@ -88,7 +93,7 @@ export function ActionMenu({ label = "操作メニュー", items }: Props) {
               // 開いたら最初の項目にフォーカスする（画面設計書 5.1 節）
               autoFocus={index === 0}
               onClick={() => {
-                selected.current = true;
+                handoff.current = item.opensDialog === true;
                 setOpen(false);
                 item.onSelect();
               }}
