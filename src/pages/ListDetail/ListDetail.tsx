@@ -203,7 +203,8 @@ function ItemRow({ item, checked, onToggle }: ItemRowProps) {
 
   return (
     <li className="flex items-start gap-1">
-      <label className="flex min-h-11 flex-1 cursor-pointer items-start gap-3 py-3">
+      {/* min-w-0 がないと、空白のない長いタイトルやメモで行が画面幅を超える */}
+      <label className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-start gap-3 py-3">
         <input
           type="checkbox"
           className="mt-0.5 size-5 shrink-0 accent-primary"
