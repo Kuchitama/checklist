@@ -53,6 +53,25 @@ export type ChecklistItemInput = {
   dueDate: string | null;
 };
 
+/** 書き出しファイル（仕様書 4 章、データ設計書 5.1 節）。チェック状態と id・時刻を含まない */
+export type ExportFile = {
+  format: "checklist-export";
+  version: 1;
+  /** ISO 8601（UTC） */
+  exportedAt: string;
+  checklist: {
+    title: string;
+    description: string;
+    tags: string[];
+    items: {
+      title: string;
+      note: string;
+      url: string | null;
+      dueDate: string | null;
+    }[];
+  };
+};
+
 export type ValidationIssue = {
   /** 例: ["title"], ["items", 3, "url"] */
   path: (string | number)[];

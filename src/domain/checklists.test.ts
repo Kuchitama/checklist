@@ -1,16 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
-import { makeChecklist, makeChecklistInput, makeItem } from "@/test/fixtures";
+import { makeBoundaryMaxInput, makeChecklist, makeChecklistInput, makeItem } from "@/test/fixtures";
 import {
   createChecklist,
   deleteChecklist,
+  exportChecklist,
   getChecklist,
   listChecklists,
   resetChecklist,
+  serializeExportFile,
   toggleItem,
   updateChecklist,
 } from "./checklists";
 import { ChecklistNotFoundError, ChecklistValidationError } from "./errors";
+import { exportFileV1Schema } from "./schema";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -425,5 +428,107 @@ describe("updateChecklist", () => {
     await expect(updateChecklist("list", makeChecklistInput({ items: [] }))).rejects.toMatchObject({
       name: "QuotaExceededError",
     });
+  });
+});
+
+describe("exportChecklist / serializeExportFile", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-25T01:02:03.004Z"));
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await db.checklists.clear();
+  });
+
+  const stored = () =>
+    makeChecklist({
+      id: "list",
+      title: "リリース手順",
+      description: "本番リリース前に必ず通す確認",
+      tags: ["仕事", "リリース"],
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-02T00:00:00.000Z",
+      items: [
+        makeItem({
+          id: "a",
+          title: "CI が緑であることを確認",
+          url: "https://example.com/ci",
+          checked: true,
+          checkedAt: "2026-10-02T00:00:00.000Z",
+        }),
+        makeItem({ id: "b", title: "リリースノートを書く", note: "前回との差分を箇条書き" }),
+        makeItem({ id: "c", title: "タグを打つ", dueDate: "2026-12-31" }),
+      ],
+    });
+
+  it("仕様書 4 章の形式にし、id・時刻・チェック状態を含めず、項目の順序を保つ", async () => {
+    await db.checklists.put(stored());
+
+    const file = await exportChecklist("list");
+
+    expect(file).toEqual({
+      format: "checklist-export",
+      version: 1,
+      exportedAt: "2026-10-25T01:02:03.004Z",
+      checklist: {
+        title: "リリース手順",
+        description: "本番リリース前に必ず通す確認",
+        tags: ["仕事", "リリース"],
+        items: [
+          {
+            title: "CI が緑であることを確認",
+            note: "",
+            url: "https://example.com/ci",
+            dueDate: null,
+          },
+          {
+            title: "リリースノートを書く",
+            note: "前回との差分を箇条書き",
+            url: null,
+            dueDate: null,
+          },
+          { title: "タグを打つ", note: "", url: null, dueDate: "2026-12-31" },
+        ],
+      },
+    });
+    // 含めてはいけないキーが、どの階層にもない
+    const keys = new Set<string>();
+    JSON.stringify(file, (key, value) => {
+      keys.add(key);
+      return value;
+    });
+    for (const key of ["id", "createdAt", "updatedAt", "checked", "checkedAt"]) {
+      expect(keys.has(key)).toBe(false);
+    }
+  });
+
+  it("存在しないリストは ChecklistNotFoundError を投げる", async () => {
+    await expect(exportChecklist("missing")).rejects.toBeInstanceOf(ChecklistNotFoundError);
+  });
+
+  it("2 スペース整形の JSON 文字列にし、読み戻すとスキーマを通って同じ値になる", async () => {
+    await db.checklists.put(stored());
+    const file = await exportChecklist("list");
+
+    const text = serializeExportFile(file);
+
+    expect(text.startsWith('{\n  "format": "checklist-export",\n  "version": 1,')).toBe(true);
+    expect(text.endsWith("\n")).toBe(true);
+    const parsed = exportFileV1Schema.safeParse(JSON.parse(text));
+    expect(parsed.success).toBe(true);
+    expect(parsed.data).toEqual(file);
+  });
+
+  it("上限いっぱいのリスト（boundary-max）も書き出して読み戻せる", async () => {
+    const created = await createChecklist(makeBoundaryMaxInput());
+
+    const text = serializeExportFile(await exportChecklist(created.id));
+
+    const parsed = exportFileV1Schema.safeParse(JSON.parse(text));
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.checklist.items).toHaveLength(500);
+    expect(parsed.data?.checklist.tags).toHaveLength(20);
   });
 });
