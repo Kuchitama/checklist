@@ -3,7 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
-import { deleteChecklist, exportChecklist, resetChecklist, toggleItem } from "@/domain/checklists";
+import {
+  deleteChecklist,
+  duplicateChecklist,
+  exportChecklist,
+  resetChecklist,
+  toggleItem,
+} from "@/domain/checklists";
 import { makeChecklist, makeItem } from "@/test/fixtures";
 import { renderApp } from "@/test/render";
 
@@ -16,6 +22,7 @@ vi.mock("@/domain/checklists", async (importOriginal) => {
     resetChecklist: vi.fn(actual.resetChecklist),
     deleteChecklist: vi.fn(actual.deleteChecklist),
     exportChecklist: vi.fn(actual.exportChecklist),
+    duplicateChecklist: vi.fn(actual.duplicateChecklist),
   };
 });
 
@@ -655,7 +662,7 @@ describe("ListDetail の書き出し", () => {
     const labels = within(sheet)
       .getAllByRole("button")
       .map((b) => b.textContent?.trim());
-    expect(labels).toEqual(["リセット", "書き出し", "削除", "キャンセル"]);
+    expect(labels).toEqual(["リセット", "複製", "書き出し", "削除", "キャンセル"]);
     await user.click(within(sheet).getByRole("button", { name: "書き出し" }));
 
     expect(await screen.findByText("ファイルを書き出しました")).toBeInTheDocument();
@@ -722,5 +729,100 @@ describe("ListDetail の書き出し", () => {
     expect(await screen.findByText("書き出せませんでした")).toBeInTheDocument();
     expect(captured.name).toBeUndefined();
     expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+});
+
+describe("ListDetail の複製", () => {
+  afterEach(async () => {
+    toast.dismiss();
+    vi.restoreAllMocks();
+    vi.mocked(duplicateChecklist).mockClear();
+    await db.checklists.clear();
+  });
+
+  const seed = () =>
+    db.checklists.put(
+      makeChecklist({
+        id: "list",
+        title: "リリース手順",
+        tags: ["仕事"],
+        items: [
+          makeItem({
+            id: "a",
+            title: "CI を確認",
+            checked: true,
+            checkedAt: "2026-10-01T00:00:00.000Z",
+          }),
+          makeItem({ id: "b", title: "タグを打つ" }),
+        ],
+      }),
+    );
+
+  it("操作メニューの「複製」で、未完了の複製を作って詳細へ遷移し、トーストを出す。戻ると元の詳細", async () => {
+    await seed();
+    const { user, router } = await openDetail();
+    await user.click(await screen.findByRole("button", { name: "操作メニュー" }));
+    const sheet = await screen.findByRole("dialog", { name: "操作メニュー" });
+    expect(
+      within(sheet)
+        .getAllByRole("button")
+        .map((b) => b.textContent?.trim()),
+    ).toEqual(["リセット", "複製", "書き出し", "削除", "キャンセル"]);
+
+    await user.click(within(sheet).getByRole("button", { name: "複製" }));
+
+    await waitFor(() => expect(router.state.location.pathname).not.toBe("/lists/list"));
+    const copies = (await db.checklists.toArray()).filter((c) => c.id !== "list");
+    expect(copies).toHaveLength(1);
+    const copy = copies[0];
+    expect(router.state.location.pathname).toBe(`/lists/${copy?.id}`);
+    expect(copy?.title).toBe("リリース手順 のコピー");
+    expect(copy?.items.every((i) => !i.checked && i.checkedAt === null)).toBe(true);
+    expect(await screen.findByText("「リリース手順 のコピー」を複製しました")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "リリース手順 のコピー" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("0 / 2")).toBeInTheDocument();
+    // 履歴は積む。ブラウザの戻るで元の詳細に戻る
+    expect(router.state.historyAction).toBe("PUSH");
+    await act(async () => {
+      await router.navigate(-1);
+    });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists/list"));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "リリース手順" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("1 / 2")).toBeInTheDocument();
+  });
+
+  it("複製に失敗したらトーストを出し、元の画面に留まる", async () => {
+    await seed();
+    vi.mocked(duplicateChecklist).mockRejectedValueOnce(
+      new DOMException("容量不足", "QuotaExceededError"),
+    );
+    const { user, router } = await openDetail();
+    await user.click(await screen.findByRole("button", { name: "操作メニュー" }));
+
+    await user.click(await screen.findByRole("button", { name: "複製" }));
+
+    expect(
+      await screen.findByText("保存できませんでした。空き容量を確認してください"),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/lists/list");
+    expect(await db.checklists.count()).toBe(1);
+  });
+
+  it("キーボードで複製を選んだ後、フォーカスは操作メニューのトリガーに戻る", async () => {
+    await seed();
+    const { user } = await openDetail();
+    const menuButton = await screen.findByRole("button", { name: "操作メニュー" });
+    menuButton.focus();
+    await user.keyboard("[Enter]");
+    const sheet = await screen.findByRole("dialog", { name: "操作メニュー" });
+    within(sheet).getByRole("button", { name: "複製" }).focus();
+    await user.keyboard("[Enter]");
+
+    await screen.findByText(/を複製しました/);
+    await waitFor(() => expect(screen.getByRole("button", { name: "操作メニュー" })).toHaveFocus());
   });
 });
