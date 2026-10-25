@@ -536,7 +536,7 @@ pending: Map<string, number>; // その項目で完了していない toggleItem
 - チェックボックスは `<input type="checkbox">` を使い、独自描画する場合も `input` を視覚的に隠すだけで DOM に残す。
 - ダイアログは `role="dialog"` と `aria-modal="true"`、`aria-labelledby` でタイトルを指す。
 - 進捗バーは `role="progressbar"` と `aria-valuenow / aria-valuemax`。
-- ドラッグ並び替えはキーボード操作を必ず提供し、操作中の位置を `aria-live="polite"` で読み上げる。dnd-kit 自身の読み上げ領域は `aria-live="assertive"` で変えられないため、`announcements` は空にして、`polite` の領域を自前に持ち日本語の文言（「項目 2 を持ち上げました」「項目 2 を 3 番目に移動しました」「項目 2 を 3 番目に置きました」「並び替えを取り消しました」）を流す。ハンドルの操作説明（`screenReaderInstructions`）も日本語にする。
+- ドラッグ並び替えはキーボード操作を必ず提供し、操作中の位置を `aria-live="polite"` で読み上げる。dnd-kit 自身の読み上げ領域は `aria-live="assertive"` で変えられないため、`announcements` は空にして、`polite` の領域を自前に持ち日本語の文言（「項目 2 を持ち上げました」「項目 2 を 3 番目に移動しました」「項目 2 を 3 番目に置きました」「並び替えを取り消しました」）を流す。ハンドルの操作説明（`screenReaderInstructions`）と役割説明（`aria-roledescription`。dnd-kit の既定は英語の `sortable`）も日本語にする。
 - フォーカスリングは消さない。`:focus-visible` で 2px の `--ring` を出す。
 - 文字サイズを 200% に拡大しても横スクロールが出ないことを確認する。
 

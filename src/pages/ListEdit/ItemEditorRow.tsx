@@ -60,7 +60,11 @@ export function ItemEditorRow({
   const syncDue = (input: HTMLInputElement) =>
     onChange({ dueDate: input.value || null, dueDateInvalid: input.validity.badInput });
 
-  const sortable = useSortable({ id: rowKey });
+  // 役割説明（aria-roledescription）の既定は英語の "sortable" なので日本語にする（要件 NFR-08、画面設計書 8 章）
+  const sortable = useSortable({
+    id: rowKey,
+    attributes: { roleDescription: "並び替えできる項目" },
+  });
   // 挿入位置の線。持ち上げた行が上から来るなら自分の下、下から来るなら自分の上に出す（画面設計書 3.3 節）
   const insertion =
     sortable.isOver && !sortable.isDragging

@@ -977,7 +977,7 @@ describe("ListEdit（並び替え）", () => {
     await openWithItems();
 
     expect(handle(0)).toHaveAccessibleDescription(/Space を押して項目を持ち上げ/);
-    expect(handle(0)).toHaveAttribute("aria-roledescription", "sortable");
+    expect(handle(0)).toHaveAttribute("aria-roledescription", "並び替えできる項目");
   });
 
   it("キーボードで Space → ↓ → Space と操作すると順序が変わり、位置を読み上げる", async () => {
