@@ -2,6 +2,7 @@ import { useRegisterSW } from "virtual:pwa-register/react";
 import { useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { reloadPage } from "@/lib/reloadPage";
 
 /** 更新通知のトーストの id。同じ更新で 2 回出さないために固定する */
 export const UPDATE_TOAST_ID = "app-update";
@@ -20,6 +21,17 @@ export function useAppUpdate() {
 
   useEffect(() => {
     if (!needRefresh) return;
+    const reload = async () => {
+      // 新しい SW がまだ waiting なら skipWaiting → controllerchange で再読み込み（vite-plugin-pwa）。
+      // 既に有効化済み（編集中の beforeunload の確認で再読み込みを取り消した後に、もう一度押したときなど）は
+      // skipWaiting を送っても何も起きないので、直接再読み込みする
+      const registration = await navigator.serviceWorker?.getRegistration();
+      if (registration?.waiting) {
+        await updateServiceWorker(true);
+      } else {
+        reloadPage();
+      }
+    };
     toast("新しいバージョンがあります", {
       id: UPDATE_TOAST_ID,
       duration: Number.POSITIVE_INFINITY,
@@ -29,7 +41,7 @@ export function useAppUpdate() {
           size="default"
           // Button 既定の ring-ring/50 はトーストの背景で 3:1 に届かないので、画面設計書 8 章の不透明な --primary にする（#61 で部品側を統一）
           className="ml-auto focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          onClick={() => void updateServiceWorker(true)}
+          onClick={() => void reload()}
         >
           再読み込み
         </Button>

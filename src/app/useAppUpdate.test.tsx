@@ -2,8 +2,12 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { reloadPage } from "@/lib/reloadPage";
 import { renderApp } from "@/test/render";
 import { UPDATE_TOAST_ID } from "./useAppUpdate";
+
+// jsdom の location.reload は差し替えられないので、関数ごとモックして呼び出しを数える
+vi.mock("@/lib/reloadPage", () => ({ reloadPage: vi.fn() }));
 
 // toast の呼び出し（id と duration）を確かめるため、sonner の toast を数えられるようにする（既定は本物を呼ぶ）
 vi.mock("sonner", async (importOriginal) => {
@@ -41,15 +45,25 @@ vi.mock("virtual:pwa-register/react", async () => {
 const detectUpdate = () => act(() => mocks.setNeedRefresh?.(true));
 const updateToast = () => screen.queryByText("新しいバージョンがあります");
 
+/** jsdom にはない navigator.serviceWorker の代わり。waiting の有無を外から変えられる */
+const registration: { waiting: object | null } = { waiting: {} };
+
 describe("useAppUpdate（更新通知）", () => {
   beforeEach(() => {
     mocks.hookCalls = 0;
+    registration.waiting = {};
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true,
+      value: { getRegistration: () => Promise.resolve(registration) },
+    });
   });
 
   afterEach(() => {
     mocks.updateServiceWorker.mockClear();
     mocks.setNeedRefresh = null;
     vi.mocked(toast).mockClear();
+    vi.mocked(reloadPage).mockClear();
+    delete (navigator as { serviceWorker?: unknown }).serviceWorker;
     localStorage.clear();
     document.documentElement.classList.remove("dark");
   });
@@ -74,8 +88,39 @@ describe("useAppUpdate（更新通知）", () => {
     // 部品既定の半透明のリングではなく、不透明な --primary のリング（画面設計書 8 章）
     expect(reload).toHaveClass("focus-visible:ring-primary", "focus-visible:ring-offset-2");
     await user.click(reload);
-    expect(mocks.updateServiceWorker).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(mocks.updateServiceWorker).toHaveBeenCalledTimes(1));
     expect(mocks.updateServiceWorker).toHaveBeenCalledWith(true);
+    expect(reloadPage).not.toHaveBeenCalled();
+  });
+
+  it("新しい SW が有効化済み（再読み込みを取り消した後など）なら、もう一度押したときは直接再読み込みする", async () => {
+    const user = userEvent.setup();
+    renderApp("/");
+    await screen.findByText("まだチェックリストがありません");
+    detectUpdate();
+    await screen.findByText("新しいバージョンがあります");
+
+    // 1 回目: waiting の SW に skipWaiting を送る（その後の再読み込みを利用者が beforeunload の確認で取り消したとする）
+    await user.click(screen.getByRole("button", { name: "再読み込み" }));
+    await waitFor(() => expect(mocks.updateServiceWorker).toHaveBeenCalledTimes(1));
+    registration.waiting = null;
+
+    // 2 回目: skipWaiting の相手がいないので、直接再読み込みする
+    await user.click(screen.getByRole("button", { name: "再読み込み" }));
+    await waitFor(() => expect(reloadPage).toHaveBeenCalledTimes(1));
+    expect(mocks.updateServiceWorker).toHaveBeenCalledTimes(1);
+  });
+
+  it("Service Worker に対応しない環境では直接再読み込みする", async () => {
+    delete (navigator as { serviceWorker?: unknown }).serviceWorker;
+    const user = userEvent.setup();
+    renderApp("/");
+    await screen.findByText("まだチェックリストがありません");
+    detectUpdate();
+    await screen.findByText("新しいバージョンがあります");
+    await user.click(screen.getByRole("button", { name: "再読み込み" }));
+    await waitFor(() => expect(reloadPage).toHaveBeenCalledTimes(1));
+    expect(mocks.updateServiceWorker).not.toHaveBeenCalled();
   });
 
   it("トーストは時間で消えず、画面遷移をまたいで残る", async () => {
@@ -122,7 +167,7 @@ describe("useAppUpdate（更新通知）", () => {
     expect(screen.getByRole("textbox", { name: /タイトル/ })).toHaveValue("買い物");
 
     await user.click(screen.getByRole("button", { name: "再読み込み" }));
-    expect(mocks.updateServiceWorker).toHaveBeenCalledWith(true);
+    await waitFor(() => expect(mocks.updateServiceWorker).toHaveBeenCalledWith(true));
     // ページの再読み込みはルーターの遷移ではないので、破棄確認は出ず、画面も変わらない
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
     expect(router.state.location.pathname).toBe("/lists/new");
