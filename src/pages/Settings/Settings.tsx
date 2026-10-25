@@ -68,7 +68,8 @@ export function Settings() {
             {THEMES.map((value) => (
               // 行全体（44px 以上）を押して選べるよう、ラベルで包む
               <Label key={value} className="min-h-11 cursor-pointer gap-3 text-base font-normal">
-                <RadioGroupItem value={value} />
+                {/* 未選択の枠は --input（白で約 1.26:1）では見えないので --muted-foreground にする。全体の統一は Issue #72 */}
+                <RadioGroupItem value={value} className="border-muted-foreground" />
                 {THEME_LABELS[value]}
               </Label>
             ))}
