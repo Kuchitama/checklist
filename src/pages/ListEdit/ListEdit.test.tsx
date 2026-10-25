@@ -590,6 +590,36 @@ describe("ListEdit（説明とタグ）", () => {
     expect(tagInput()).toHaveAccessibleDescription("タグは 30 文字以内です");
   });
 
+  it("上限のエラーは、チップを消して確定し直すと消える", async () => {
+    const { user } = await openNew();
+    for (let i = 1; i <= 20; i++) await user.type(tagInput(), `t${i}{Enter}`);
+    await user.type(tagInput(), "t21{Enter}");
+    expect(tagInput()).toHaveAccessibleDescription("タグは 20 個までです");
+
+    await user.click(screen.getByRole("button", { name: "タグ「t1」を削除" }));
+    await user.click(tagInput());
+    await user.keyboard("{Enter}");
+
+    expect(chips()).toHaveLength(20);
+    expect(chips()).toContain("t21");
+    expect(screen.queryByText("タグは 20 個までです")).not.toBeInTheDocument();
+  });
+
+  it("保存時に未確定の入力が 31 文字以上なら、確定も保存もせずにエラーを出す", async () => {
+    const { user } = await openNew();
+    await user.type(titleInput(), "旅行の持ち物");
+    const long = "あ".repeat(31);
+    await user.type(tagInput(), long);
+
+    await user.click(saveButton());
+
+    expect(await screen.findByText("タグは 30 文字以内です")).toBeInTheDocument();
+    expect(chips()).toEqual([]);
+    expect(tagInput()).toHaveValue(long);
+    expect(tagInput()).toHaveFocus();
+    expect(await db.checklists.count()).toBe(0);
+  });
+
   it("保存時に未確定の入力を確定する。空白だけなら無視する", async () => {
     const { user, router } = await openNew();
     await user.type(titleInput(), "旅行の持ち物");

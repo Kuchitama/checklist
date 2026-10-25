@@ -25,6 +25,13 @@ export function toTag(draft: string): string | null {
   return value === "" ? null : value;
 }
 
+/** value を tags に加えられないときの文言（画面設計書 6.1 節）。加えられるなら null。重複は加えないだけでエラーにしない */
+export function tagLimitError(tags: string[], value: string): string | null {
+  if (cpLength(value) > MAX_TAG_LENGTH) return messageFor("too_long", "タグ");
+  if (!tags.includes(value) && tags.length >= MAX_TAGS) return messageFor("too_many", "タグ");
+  return null;
+}
+
 /**
  * タグ入力（画面設計書 3.3 節、4 章の TagInput / TagChip、5.1 節）。
  * チップ列の末尾に入力欄。Enter または `,` で確定し、確定時に trim と重複除去をする。
@@ -42,23 +49,21 @@ export function TagInput({ id, tags, draft, onTagsChange, onDraftChange, error, 
       onDraftChange("");
       return;
     }
-    if (cpLength(value) > MAX_TAG_LENGTH) {
-      setLimitError(messageFor("too_long", "タグ"));
+    const problem = tagLimitError(tags, value);
+    if (problem) {
+      setLimitError(problem);
       return;
     }
-    if (tags.includes(value)) {
-      onDraftChange("");
-      return;
-    }
-    if (tags.length >= MAX_TAGS) {
-      setLimitError(messageFor("too_many", "タグ"));
-      return;
-    }
-    onTagsChange([...tags, value]);
+    // 確定できたら、前に出した上限のエラーは消す
+    setLimitError(null);
+    if (!tags.includes(value)) onTagsChange([...tags, value]);
     onDraftChange("");
   };
 
-  const remove = (tag: string) => onTagsChange(tags.filter((t) => t !== tag));
+  const remove = (tag: string) => {
+    setLimitError(null);
+    onTagsChange(tags.filter((t) => t !== tag));
+  };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.nativeEvent.isComposing) return;

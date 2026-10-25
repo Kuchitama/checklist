@@ -9,7 +9,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { NotFoundState } from "@/components/NotFoundState";
-import { TagInput, toTag } from "@/components/TagInput";
+import { TagInput, tagLimitError, toTag } from "@/components/TagInput";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -231,6 +231,14 @@ function ListEditor(props: EditorProps) {
 
   const save = async () => {
     if (saving) return;
+    // 未確定のタグが上限を超えていたら、確定も保存もせず入力欄の直下にエラーを出す（入力は残す）
+    const draftValue = toTag(tagDraft);
+    const draftProblem = draftValue === null ? null : tagLimitError(tags, draftValue);
+    if (draftProblem) {
+      setErrors((current) => ({ ...current, tags: draftProblem }));
+      tagRef.current?.focus();
+      return;
+    }
     const input = toInput(title, description, tags, tagDraft, rows);
     // 未確定のタグを確定した状態を画面にも反映する
     setTags(input.tags);
