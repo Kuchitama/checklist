@@ -5,17 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>チェックリスト</title>
     <script>
-      // 初回描画のちらつきを防ぐため、React の起動前にテーマを決める（画面設計書 7.3 節）
+      // 初回描画のちらつきを防ぐため、React の起動前にテーマを決める（画面設計書 7.3 節）。
+      // 判定は src/domain/settings.ts の readSettings / resolveTheme と同じにする（データ設計書 6 章）。
+      // 変えるときは src/app/themeInit.test.ts が両者の一致を確かめる
       (() => {
+        let theme = "system";
         try {
-          const raw = localStorage.getItem("checklist.settings");
-          const theme = raw ? JSON.parse(raw).theme : "system";
-          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-          if (theme === "dark" || (theme !== "light" && prefersDark)) {
-            document.documentElement.classList.add("dark");
+          const value = JSON.parse(localStorage.getItem("checklist.settings"));
+          if (value && value.version === 1 && (value.theme === "light" || value.theme === "dark")) {
+            theme = value.theme;
           }
         } catch {
-          // localStorage が使えない環境では OS 設定に従う既定のまま
+          // 解析できない、localStorage が使えない → 既定値（OS に合わせる）
+        }
+        let prefersDark = false;
+        try {
+          prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        } catch {
+          // matchMedia がない環境ではライト
+        }
+        if (theme === "dark" || (theme === "system" && prefersDark)) {
+          document.documentElement.classList.add("dark");
         }
       })();
     </script>
