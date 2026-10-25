@@ -25,6 +25,10 @@ type Props = {
    * 渡さなければ Radix の既定（トリガーがなければ body）
    */
   returnFocusTo?: RefObject<HTMLElement | null>;
+  /** 確定後の処理中。キャンセル・Esc・外側の操作で閉じられなくし、ボタンと入力欄を無効にする */
+  busy?: boolean;
+  /** 処理中に確定ボタンに出す文言（「削除しています」など）。省略すると confirmLabel のまま */
+  busyLabel?: string;
   onConfirm: () => void;
   /** キャンセルボタン、Esc、外側の操作で閉じたときに呼ぶ */
   onCancel: () => void;
@@ -43,6 +47,8 @@ export function ConfirmDialog({
   danger,
   confirmInput,
   returnFocusTo,
+  busy = false,
+  busyLabel,
   onConfirm,
   onCancel,
 }: Props) {
@@ -50,7 +56,8 @@ export function ConfirmDialog({
     <AlertDialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) onCancel();
+        // 処理中は閉じない（閉じたように見えて処理が続くのを防ぐ）
+        if (!next && !busy) onCancel();
       }}
     >
       {/* 入力欄の値は開くたびに空にするため、中身は開いている間だけ描画する */}
@@ -62,6 +69,8 @@ export function ConfirmDialog({
           danger={danger}
           confirmInput={confirmInput}
           returnFocusTo={returnFocusTo}
+          busy={busy}
+          busyLabel={busyLabel}
           onConfirm={onConfirm}
         />
       )}
@@ -76,6 +85,8 @@ function ConfirmDialogBody({
   danger,
   confirmInput,
   returnFocusTo,
+  busy,
+  busyLabel,
   onConfirm,
 }: Omit<Props, "open" | "onCancel">) {
   const [value, setValue] = useState("");
@@ -88,13 +99,14 @@ function ConfirmDialogBody({
     // IME の変換確定の Enter では確定しない
     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
     event.preventDefault();
-    if (matched) onConfirm();
+    if (matched && !busy) onConfirm();
   };
 
   return (
     <AlertDialogContent
       // 本文の id を自前にしたので、Radix が自動で付ける aria-describedby も同じ id に向ける
       aria-describedby={messageId}
+      aria-busy={busy || undefined}
       onOpenAutoFocus={(event) => {
         if (confirmInput === undefined) return;
         // 既定（キャンセルにフォーカス）の代わりに入力欄へ渡す（画面設計書 8 章）
@@ -117,23 +129,24 @@ function ConfirmDialogBody({
           ref={inputRef}
           aria-labelledby={messageId}
           autoComplete="off"
+          disabled={busy}
           value={value}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={onKeyDown}
         />
       )}
       <AlertDialogFooter>
-        <AlertDialogCancel>キャンセル</AlertDialogCancel>
+        <AlertDialogCancel disabled={busy}>キャンセル</AlertDialogCancel>
         <AlertDialogAction
           variant={danger ? "destructive" : "default"}
-          disabled={!matched}
+          disabled={!matched || busy}
           onClick={(event) => {
             // 既定の自動クローズ（onOpenChange(false) → onCancel）を止め、確定だけを呼び出し元に伝える
             event.preventDefault();
             onConfirm();
           }}
         >
-          {confirmLabel}
+          {busy ? (busyLabel ?? confirmLabel) : confirmLabel}
         </AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>

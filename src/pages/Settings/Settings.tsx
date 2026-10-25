@@ -127,6 +127,8 @@ export function Settings() {
         danger
         confirmInput="削除"
         returnFocusTo={deleteButtonRef}
+        busy={deleting}
+        busyLabel="削除しています"
         onConfirm={remove}
         onCancel={() => setStep(null)}
       />

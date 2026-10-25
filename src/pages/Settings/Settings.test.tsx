@@ -234,6 +234,40 @@ describe("Settings", () => {
       expect(within(dialog()).getByRole("button", { name: "削除" })).toBeDisabled();
     });
 
+    it("削除の処理中はキャンセル・Esc で閉じられず、「削除しています」を出す。完了したら一覧へ", async () => {
+      await db.checklists.put(makeChecklist({ id: "a" }));
+      let finish: () => void = () => {};
+      const actual =
+        await vi.importActual<typeof import("@/domain/checklists")>("@/domain/checklists");
+      vi.mocked(clearAllData).mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            finish = () => resolve(actual.clearAllData());
+          }),
+      );
+      const { user } = await openSettings();
+      const input = await openSecondStep(user);
+      await user.type(input, "削除");
+      await user.click(within(dialog()).getByRole("button", { name: "削除" }));
+
+      // 処理中: 文言が変わり、キャンセルと入力欄は無効、Esc でも閉じない
+      const busy = within(dialog()).getByRole("button", { name: "削除しています" });
+      expect(busy).toBeDisabled();
+      expect(within(dialog()).getByRole("button", { name: "キャンセル" })).toBeDisabled();
+      expect(input).toBeDisabled();
+      expect(dialog()).toHaveAttribute("aria-busy", "true");
+      await user.keyboard("{Escape}");
+      await user.click(within(dialog()).getByRole("button", { name: "キャンセル" }));
+      expect(dialog()).toBeInTheDocument();
+      expect(await db.checklists.count()).toBe(1);
+
+      await act(async () => {
+        finish();
+      });
+      expect(await screen.findByText("まだチェックリストがありません")).toBeInTheDocument();
+      expect(await db.checklists.count()).toBe(0);
+    });
+
     it("削除に失敗したらダイアログを閉じてトーストを出し、設定画面に留まる", async () => {
       await db.checklists.put(makeChecklist({ id: "a" }));
       vi.mocked(clearAllData).mockRejectedValueOnce(new Error("QuotaExceededError"));
