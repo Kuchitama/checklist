@@ -783,10 +783,16 @@ describe("ListDetail の複製", () => {
       await screen.findByRole("heading", { level: 1, name: "リリース手順 のコピー" }),
     ).toBeInTheDocument();
     expect(screen.getByText("0 / 2")).toBeInTheDocument();
-    // 履歴は積む。戻ると元の詳細
+    // 履歴は積む。ブラウザの戻るで元の詳細に戻る
     expect(router.state.historyAction).toBe("PUSH");
-    await user.click(screen.getByRole("link", { name: "戻る" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+    await act(async () => {
+      await router.navigate(-1);
+    });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists/list"));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "リリース手順" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("1 / 2")).toBeInTheDocument();
   });
 
   it("複製に失敗したらトーストを出し、元の画面に留まる", async () => {
