@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { useLiveQuery } from "dexie-react-hooks";
-import { Download, ExternalLink, RotateCcw, Trash2 } from "lucide-react";
+import { Copy, Download, ExternalLink, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   deleteChecklist,
+  duplicateChecklist,
   exportChecklist,
   getChecklist,
   resetChecklist,
@@ -28,8 +29,7 @@ import { exportFileName } from "@/lib/exportFileName";
 import { useToday } from "@/lib/useToday";
 
 /**
- * 詳細画面（画面設計書 3.2 節、仕様書 5.2 節）。項目の表示とチェック・解除、リセット、書き出し、削除を行う。
- * 操作メニューの複製は M4 で追加する。
+ * 詳細画面（画面設計書 3.2 節、仕様書 5.2 節）。項目の表示とチェック・解除、リセット、複製、書き出し、削除を行う。
  */
 export function ListDetail() {
   const { id = "" } = useParams();
@@ -62,6 +62,17 @@ function ListDetailContent({ id }: { id: string }) {
     setConfirming(null);
     try {
       await resetChecklist(id);
+    } catch {
+      toast.error(SAVE_FAILED, { duration: 5000 });
+    }
+  };
+
+  // 複製（仕様書 5.2 節、FR-04）。チェック状態を引き継がない複製を作り、その詳細へ進む（履歴は積む。戻ると元の詳細）
+  const duplicate = async () => {
+    try {
+      const copy = await duplicateChecklist(id);
+      toast.success(`「${copy.title}」を複製しました`, { duration: 3000 });
+      navigate(`/lists/${copy.id}`);
     } catch {
       toast.error(SAVE_FAILED, { duration: 5000 });
     }
@@ -107,6 +118,11 @@ function ListDetailContent({ id }: { id: string }) {
                 icon: <RotateCcw aria-hidden="true" />,
                 opensDialog: true,
                 onSelect: () => setConfirming("reset"),
+              },
+              {
+                label: "複製",
+                icon: <Copy aria-hidden="true" />,
+                onSelect: duplicate,
               },
               {
                 label: "書き出し",
