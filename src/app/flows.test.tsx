@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
 import { renderApp } from "@/test/render";
 
@@ -10,6 +10,7 @@ import { renderApp } from "@/test/render";
  */
 describe("ユースケースの通しテスト", () => {
   afterEach(async () => {
+    vi.restoreAllMocks();
     await db.checklists.clear();
   });
 
@@ -67,6 +68,71 @@ describe("ユースケースの通しテスト", () => {
       ["タグを打つ", false, null],
       ["告知を出す", false, null],
     ]);
+  });
+
+  it("US-4 / US-5: 手順書を書き出し、そのファイルを読み込むと、チェック状態のない新しいリストになる", async () => {
+    // ダウンロードは jsdom では動かないので、書き出された Blob を捕まえる
+    let exported: Blob | undefined;
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      exported = blob;
+      return "blob:mock";
+    });
+    URL.revokeObjectURL = vi.fn();
+    let downloadName = "";
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
+      this: HTMLAnchorElement,
+    ) {
+      downloadName = this.download;
+    });
+    const user = userEvent.setup();
+    const { router } = renderApp("/");
+    await screen.findByText("まだチェックリストがありません");
+
+    // 作ってチェックを付ける（書き出しにはチェック状態が含まれない）
+    await createList(user, "リリース手順", ["CI を確認", "タグを打つ"]);
+    await user.click(screen.getByRole("checkbox", { name: "CI を確認" }));
+    await waitFor(async () => {
+      const [stored] = await db.checklists.toArray();
+      expect(stored?.items[0]?.checked).toBe(true);
+    });
+    const [source] = await db.checklists.toArray();
+
+    // 書き出し
+    await user.click(screen.getByRole("button", { name: "操作メニュー" }));
+    await user.click(await screen.findByRole("button", { name: "書き出し" }));
+    expect(await screen.findByText("ファイルを書き出しました")).toBeInTheDocument();
+    expect(downloadName).toMatch(/^checklist-リリース手順-\d{8}\.json$/);
+    const text = await exported?.text();
+    expect(text).toBeDefined();
+
+    // 別端末で読み込む想定: 一覧の「読み込み」から同じ内容のファイルを選ぶ
+    await user.click(screen.getByRole("link", { name: "戻る" }));
+    await user.click(await screen.findByRole("link", { name: "読み込み" }));
+    await screen.findByRole("heading", { name: "ファイルを読み込む" });
+    await user.upload(
+      screen.getByLabelText("ファイルを選択"),
+      new File([text ?? ""], downloadName, { type: "application/json" }),
+    );
+    const preview = await screen.findByRole("region", { name: "プレビュー" });
+    expect(within(preview).getByRole("heading", { name: "リリース手順" })).toBeInTheDocument();
+    expect(within(preview).getByText("項目 2 件")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "取り込む" }));
+
+    // 新しい id の詳細に着き、チェックはすべて未完了。元のリストは変わらない
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/lists\/[0-9a-f-]+$/));
+    expect(router.state.location.pathname).not.toBe(`/lists/${source?.id}`);
+    expect(await screen.findByText("「リリース手順」を取り込みました")).toBeInTheDocument();
+    expect(await screen.findByText("0 / 2")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "CI を確認" })).not.toBeChecked();
+    const lists = await db.checklists.toArray();
+    expect(lists).toHaveLength(2);
+    const imported = lists.find((l) => l.id !== source?.id);
+    expect(imported?.items.map((i) => [i.title, i.checked, i.checkedAt])).toEqual([
+      ["CI を確認", false, null],
+      ["タグを打つ", false, null],
+    ]);
+    expect(imported?.items.map((i) => i.id)).not.toEqual(source?.items.map((i) => i.id));
+    expect(lists.find((l) => l.id === source?.id)).toEqual(source);
   });
 
   it("US-2: 持ち物リストを作り、一部をチェックすると一覧のカードに進捗が反映される", async () => {
