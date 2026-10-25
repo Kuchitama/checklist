@@ -25,7 +25,12 @@ export function useAppUpdate() {
       duration: Number.POSITIVE_INFINITY,
       // sonner の既定の操作ボタンは高さ 24px なので、44px の Button を使う（画面設計書 2.1 節）
       action: (
-        <Button size="default" className="ml-auto" onClick={() => void updateServiceWorker(true)}>
+        <Button
+          size="default"
+          // Button 既定の ring-ring/50 はトーストの背景で 3:1 に届かないので、画面設計書 8 章の不透明な --primary にする（#61 で部品側を統一）
+          className="ml-auto focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          onClick={() => void updateServiceWorker(true)}
+        >
           再読み込み
         </Button>
       ),
