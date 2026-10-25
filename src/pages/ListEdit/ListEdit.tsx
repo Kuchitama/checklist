@@ -4,10 +4,12 @@ import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useBlocker, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
+import { AutoTextarea } from "@/components/AutoTextarea";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { NotFoundState } from "@/components/NotFoundState";
+import { TagInput, toTag } from "@/components/TagInput";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,20 +34,36 @@ type Row = {
 };
 
 /** 入力欄ごとのエラー文言。項目は行の key で引く（行の追加・削除で位置がずれても対応が崩れない） */
-type Errors = { title?: string; items?: string; rows: Record<string, string> };
+type Errors = {
+  title?: string;
+  description?: string;
+  tags?: string;
+  items?: string;
+  rows: Record<string, string>;
+};
 
 const NO_ERRORS: Errors = { rows: {} };
 
-/** タイトルと項目以外の入力欄はまだないので、読み込んだ値（新規は空）をそのまま保つ */
-type Base = Pick<ChecklistInput, "description" | "tags">;
-
-function toInput(title: string, rows: Row[], base: Base): ChecklistInput {
+/** 画面の入力をドメインの入力にする。タグの未確定の入力は確定したものとして扱う（画面設計書 3.3 節） */
+function toInput(
+  title: string,
+  description: string,
+  tags: string[],
+  tagDraft: string,
+  rows: Row[],
+): ChecklistInput {
   return {
     title,
-    description: base.description,
-    tags: base.tags,
+    description,
+    tags: commitTag(tags, tagDraft),
     items: rows.map(({ key: _key, ...item }) => item),
   };
+}
+
+/** 未確定の入力をタグ列に加える。空白だけなら無視し、重複は加えない */
+function commitTag(tags: string[], draft: string): string[] {
+  const value = toTag(draft);
+  return value === null || tags.includes(value) ? tags : [...tags, value];
 }
 
 function rowsOf(checklist: Checklist): Row[] {
@@ -65,6 +83,8 @@ function toErrors(issues: ValidationIssue[], rows: Row[]): Errors {
   for (const issue of issues) {
     const [field, index] = issue.path;
     if (field === "title") errors.title ??= issue.message;
+    else if (field === "description") errors.description ??= issue.message;
+    else if (field === "tags") errors.tags ??= issue.message;
     else if (field === "items" && typeof index === "number") {
       const key = rows[index]?.key;
       if (key && !errors.rows[key]) errors.rows[key] = issue.message;
@@ -75,7 +95,7 @@ function toErrors(issues: ValidationIssue[], rows: Row[]): Errors {
 
 /**
  * 新規作成（`#/lists/new`）と編集（`#/lists/:id/edit`）の画面（画面設計書 3.3 節、仕様書 5.3 節）。
- * M2 のこの段階ではタイトルと項目タイトルを入力する。説明・タグ・項目の詳細・並び替えは後続の Issue で加える。
+ * タイトル・説明・タグと項目タイトルを入力する。項目の詳細（メモ・URL・期限）と並び替えは後続の Issue で加える。
  */
 export function ListEdit() {
   const { id } = useParams();
@@ -115,24 +135,34 @@ type EditorProps = { mode: "new" } | { mode: "edit"; checklist: Checklist };
 function ListEditor(props: EditorProps) {
   const navigate = useNavigate();
   const checklist = props.mode === "edit" ? props.checklist : null;
-  const base: Base = checklist ?? { description: "", tags: [] };
   // 「変更あり」はこの初期値と比べて判定する（新規は空。画面設計書 7.1 節）
-  const initialInput = toInput(checklist?.title ?? "", checklist ? rowsOf(checklist) : [], base);
+  const initialInput = toInput(
+    checklist?.title ?? "",
+    checklist?.description ?? "",
+    checklist?.tags ?? [],
+    "",
+    checklist ? rowsOf(checklist) : [],
+  );
   // キャンセルと「戻る」の行き先。新規は一覧、編集は詳細
   const backTo = checklist ? `/lists/${checklist.id}` : "/";
 
   const [title, setTitle] = useState(initialInput.title);
+  const [description, setDescription] = useState(initialInput.description);
+  const [tags, setTags] = useState(initialInput.tags);
+  const [tagDraft, setTagDraft] = useState("");
   const [rows, setRows] = useState<Row[]>(() => (checklist ? rowsOf(checklist) : []));
   const [errors, setErrors] = useState<Errors>(NO_ERRORS);
   const [saving, setSaving] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const tagRef = useRef<HTMLInputElement>(null);
   const rowRefs = useRef(new Map<string, HTMLInputElement>());
   const [focusKey, setFocusKey] = useState<string | null>(null);
   // 保存に成功したら、詳細への遷移を破棄確認で止めない
   const saved = useRef(false);
 
   const changed =
-    JSON.stringify(normalizeChecklistInput(toInput(title, rows, base))) !==
+    JSON.stringify(normalizeChecklistInput(toInput(title, description, tags, tagDraft, rows))) !==
     JSON.stringify(normalizeChecklistInput(initialInput));
 
   // キャンセル、ヘッダーの「戻る」、ブラウザの戻る、リンク遷移のすべてで破棄確認を出す（画面設計書 7.1 節）
@@ -184,12 +214,11 @@ function ListEditor(props: EditorProps) {
     insertRow(index + 1);
   };
 
-  /** 最初のエラー欄（タイトル → 項目の順）にフォーカスを移す */
+  /** 最初のエラー欄（タイトル → 説明 → タグ → 項目の順）にフォーカスを移す */
   const focusFirstError = (next: Errors) => {
-    if (next.title) {
-      titleRef.current?.focus();
-      return;
-    }
+    if (next.title) return titleRef.current?.focus();
+    if (next.description) return descriptionRef.current?.focus();
+    if (next.tags) return tagRef.current?.focus();
     const firstRow = rows.find((row) => next.rows[row.key]);
     if (firstRow) rowRefs.current.get(firstRow.key)?.focus();
   };
@@ -202,7 +231,10 @@ function ListEditor(props: EditorProps) {
 
   const save = async () => {
     if (saving) return;
-    const input = toInput(title, rows, base);
+    const input = toInput(title, description, tags, tagDraft, rows);
+    // 未確定のタグを確定した状態を画面にも反映する
+    setTags(input.tags);
+    setTagDraft("");
     const issues = validateChecklistInput(normalizeChecklistInput(input));
     if (issues.length > 0) {
       showIssues(issues);
@@ -256,6 +288,45 @@ function ListEditor(props: EditorProps) {
             }}
           />
           {errors.title && <FieldError id="list-title-error">{errors.title}</FieldError>}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="list-description">説明</Label>
+          <AutoTextarea
+            id="list-description"
+            ref={descriptionRef}
+            value={description}
+            minRows={2}
+            maxRows={10}
+            aria-invalid={errors.description ? true : undefined}
+            aria-describedby={errors.description ? "list-description-error" : undefined}
+            onChange={(event) => {
+              setDescription(event.target.value);
+              setErrors((current) => ({ ...current, description: undefined }));
+            }}
+          />
+          {errors.description && (
+            <FieldError id="list-description-error">{errors.description}</FieldError>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="list-tags">タグ</Label>
+          <TagInput
+            id="list-tags"
+            inputRef={tagRef}
+            tags={tags}
+            draft={tagDraft}
+            error={errors.tags}
+            onTagsChange={(next) => {
+              setTags(next);
+              setErrors((current) => ({ ...current, tags: undefined }));
+            }}
+            onDraftChange={(next) => {
+              setTagDraft(next);
+              setErrors((current) => ({ ...current, tags: undefined }));
+            }}
+          />
         </div>
 
         <section aria-labelledby="items-heading" className="flex flex-col gap-2">

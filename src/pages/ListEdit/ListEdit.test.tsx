@@ -489,3 +489,158 @@ describe("ListEdit（編集）", () => {
     expect(screen.queryByRole("button", { name: "再試行" })).not.toBeInTheDocument();
   });
 });
+
+describe("ListEdit（説明とタグ）", () => {
+  const descriptionInput = () => screen.getByRole("textbox", { name: "説明" });
+  const tagInput = () => screen.getByRole("textbox", { name: "タグ" });
+  const chips = () => {
+    const list = screen.queryByRole("list", { name: "タグ" });
+    return list
+      ? within(list)
+          .getAllByRole("listitem")
+          .map((li) => li.textContent)
+      : [];
+  };
+
+  afterEach(async () => {
+    toast.dismiss();
+    vi.restoreAllMocks();
+    vi.mocked(createChecklist).mockClear();
+    vi.mocked(updateChecklist).mockClear();
+    await db.checklists.clear();
+  });
+
+  it("説明を入力して保存すると、改行を保って保存される", async () => {
+    const { user, router } = await openNew();
+    await user.type(titleInput(), "リリース手順");
+
+    await user.type(descriptionInput(), "本番リリース前に{Enter}必ず通す確認");
+    await user.click(saveButton());
+
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/lists\//));
+    const [saved] = await db.checklists.toArray();
+    expect(saved?.description).toBe("本番リリース前に\n必ず通す確認");
+  });
+
+  it("説明が 1000 文字を超えたら直下にエラーを出して保存を止め、説明にフォーカスする", async () => {
+    const { user } = await openNew();
+    await user.type(titleInput(), "リリース手順");
+    await user.click(descriptionInput());
+    await user.paste("あ".repeat(1001));
+
+    await user.click(saveButton());
+
+    expect(await screen.findByText("説明は 1000 文字以内です")).toBeInTheDocument();
+    expect(descriptionInput()).toHaveAccessibleDescription("説明は 1000 文字以内です");
+    expect(descriptionInput()).toHaveFocus();
+    expect(await db.checklists.count()).toBe(0);
+  });
+
+  it("タグは Enter または , で確定し、trim と重複除去をする", async () => {
+    const { user } = await openNew();
+
+    await user.type(tagInput(), "仕事{Enter}");
+    expect(chips()).toEqual(["仕事"]);
+    expect(tagInput()).toHaveValue("");
+
+    await user.type(tagInput(), " 仕事 ,");
+    expect(chips()).toEqual(["仕事"]);
+    expect(tagInput()).toHaveValue("");
+
+    await user.type(tagInput(), "リリース,");
+    expect(chips()).toEqual(["仕事", "リリース"]);
+  });
+
+  it("Backspace で入力が空なら直前のチップを削除し、Esc で入力内容を消す", async () => {
+    const { user } = await openNew();
+    await user.type(tagInput(), "仕事{Enter}リリース{Enter}");
+
+    await user.keyboard("{Backspace}");
+    expect(chips()).toEqual(["仕事"]);
+
+    await user.type(tagInput(), "途中まで");
+    await user.keyboard("{Escape}");
+    expect(tagInput()).toHaveValue("");
+    expect(chips()).toEqual(["仕事"]);
+  });
+
+  it("チップの削除ボタンで消せる", async () => {
+    const { user } = await openNew();
+    await user.type(tagInput(), "仕事{Enter}リリース{Enter}");
+
+    await user.click(screen.getByRole("button", { name: "タグ「仕事」を削除" }));
+
+    expect(chips()).toEqual(["リリース"]);
+  });
+
+  it("21 個目と 31 文字以上は確定せず、直下にエラーを出す", async () => {
+    const { user } = await openNew();
+    for (let i = 1; i <= 20; i++) await user.type(tagInput(), `t${i}{Enter}`);
+    expect(chips()).toHaveLength(20);
+
+    await user.type(tagInput(), "t21{Enter}");
+    expect(chips()).toHaveLength(20);
+    expect(tagInput()).toHaveValue("t21");
+    expect(tagInput()).toHaveAccessibleDescription("タグは 20 個までです");
+
+    await user.clear(tagInput());
+    await user.click(screen.getByRole("button", { name: "タグ「t20」を削除" }));
+    await user.type(tagInput(), `${"あ".repeat(31)}{Enter}`);
+    expect(chips()).toHaveLength(19);
+    expect(tagInput()).toHaveAccessibleDescription("タグは 30 文字以内です");
+  });
+
+  it("保存時に未確定の入力を確定する。空白だけなら無視する", async () => {
+    const { user, router } = await openNew();
+    await user.type(titleInput(), "旅行の持ち物");
+    await user.type(tagInput(), "仕事{Enter}");
+    await user.type(tagInput(), "旅行");
+
+    await user.click(saveButton());
+
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/lists\//));
+    const [saved] = await db.checklists.toArray();
+    expect(saved?.tags).toEqual(["仕事", "旅行"]);
+  });
+
+  it("空白だけの未確定の入力は保存時に無視する", async () => {
+    const { user, router } = await openNew();
+    await user.type(titleInput(), "旅行の持ち物");
+    await user.type(tagInput(), "   ");
+
+    await user.click(saveButton());
+
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/lists\//));
+    const [saved] = await db.checklists.toArray();
+    expect(saved?.tags).toEqual([]);
+  });
+
+  it("編集では説明とタグを初期値にし、説明を変えると破棄確認の対象になる", async () => {
+    await db.checklists.put(
+      makeChecklist({
+        id: "list",
+        title: "旅行の持ち物",
+        description: "前回の反省",
+        tags: ["旅行", "準備"],
+      }),
+    );
+    const user = userEvent.setup();
+    const { router } = renderApp(["/lists/list", "/lists/list/edit"]);
+    await screen.findByRole("heading", { name: "リストを編集" });
+
+    expect(descriptionInput()).toHaveValue("前回の反省");
+    expect(chips()).toEqual(["旅行", "準備"]);
+
+    await user.click(screen.getByRole("button", { name: "キャンセル" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists/list"));
+
+    await act(() => router.navigate("/lists/list/edit"));
+    await screen.findByRole("heading", { name: "リストを編集" });
+    await user.type(descriptionInput(), "！");
+    await user.click(screen.getByRole("button", { name: "キャンセル" }));
+
+    expect(
+      await screen.findByRole("alertdialog", { name: "変更を破棄しますか？" }),
+    ).toBeInTheDocument();
+  });
+});
