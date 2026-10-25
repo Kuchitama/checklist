@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
 import { createChecklist, updateChecklist } from "@/domain/checklists";
 import { ChecklistValidationError } from "@/domain/errors";
@@ -907,5 +907,170 @@ describe("ListEdit（項目の詳細）", () => {
       await screen.findByRole("alertdialog", { name: "変更を破棄しますか？" }),
     ).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/lists/list/edit");
+  });
+});
+
+describe("ListEdit（並び替え）", () => {
+  const handle = (index: number) =>
+    screen.getByRole("button", { name: `項目 ${index + 1} を並び替え` });
+  const status = () => screen.getByRole("status", { name: "並び替え" });
+  const values = () => itemInputs().map((i) => (i as HTMLInputElement).value);
+  const ROW_HEIGHT = 48;
+
+  /**
+   * jsdom は要素の位置をすべて 0 で返すため、dnd-kit が行の上下関係を判定できない。
+   * 編集画面の項目の li だけ、並び順から縦に並んだ位置を返すようにする
+   */
+  beforeEach(() => {
+    const original = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const list = this.parentElement;
+      const inEditor = this.closest("section")?.getAttribute("aria-labelledby") === "items-heading";
+      if (this.tagName !== "LI" || !list || !inEditor) return original.call(this);
+      const top = Array.from(list.children).indexOf(this) * ROW_HEIGHT;
+      return {
+        x: 0,
+        y: top,
+        top,
+        left: 0,
+        width: 320,
+        height: ROW_HEIGHT,
+        right: 320,
+        bottom: top + ROW_HEIGHT,
+        toJSON: () => ({}),
+      } as DOMRect;
+    });
+  });
+
+  afterEach(async () => {
+    toast.dismiss();
+    vi.restoreAllMocks();
+    vi.mocked(updateChecklist).mockClear();
+    await db.checklists.clear();
+  });
+
+  async function openWithItems() {
+    await db.checklists.put(
+      makeChecklist({
+        id: "list",
+        items: [
+          makeItem({
+            id: "a",
+            title: "一つ目",
+            checked: true,
+            checkedAt: "2026-10-02T00:00:00.000Z",
+          }),
+          makeItem({ id: "b", title: "二つ目" }),
+          makeItem({ id: "c", title: "三つ目" }),
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    const result = renderApp(["/lists/list", "/lists/list/edit"]);
+    await screen.findByRole("heading", { name: "リストを編集" });
+    return { user, ...result };
+  }
+
+  it("各行にドラッグハンドルがあり、操作説明が日本語で結び付いている", async () => {
+    await openWithItems();
+
+    expect(handle(0)).toHaveAccessibleDescription(/Space を押して項目を持ち上げ/);
+    expect(handle(0)).toHaveAttribute("aria-roledescription", "sortable");
+  });
+
+  it("キーボードで Space → ↓ → Space と操作すると順序が変わり、位置を読み上げる", async () => {
+    const { user } = await openWithItems();
+
+    handle(0).focus();
+    await user.keyboard("[Space]");
+    await waitFor(() => expect(status()).toHaveTextContent("項目 1 を持ち上げました"));
+    await user.keyboard("[ArrowDown]");
+    await waitFor(() => expect(status()).toHaveTextContent("項目 1 を 2 番目に移動しました"));
+    await user.keyboard("[Space]");
+
+    await waitFor(() => expect(values()).toEqual(["二つ目", "一つ目", "三つ目"]));
+    expect(status()).toHaveTextContent("項目 1 を 2 番目に置きました");
+    // 動かした行の名前は新しい位置になる
+    expect(screen.getByRole("textbox", { name: "項目 2" })).toHaveValue("一つ目");
+  });
+
+  it("↑ で上へ動かせる。Esc で取り消すと元の順序に戻る", async () => {
+    const { user } = await openWithItems();
+
+    handle(2).focus();
+    await user.keyboard("[Space][ArrowUp][ArrowUp][Space]");
+    await waitFor(() => expect(values()).toEqual(["三つ目", "一つ目", "二つ目"]));
+
+    handle(0).focus();
+    await user.keyboard("[Space][ArrowDown]");
+    await waitFor(() => expect(status()).toHaveTextContent("項目 1 を 2 番目に移動しました"));
+    await user.keyboard("[Escape]");
+
+    await waitFor(() => expect(status()).toHaveTextContent("並び替えを取り消しました"));
+    expect(values()).toEqual(["三つ目", "一つ目", "二つ目"]);
+  });
+
+  it("並び替えた順序で保存され、チェック状態は項目に付いて動く。詳細画面もその順序になる", async () => {
+    const { user, router } = await openWithItems();
+
+    handle(0).focus();
+    await user.keyboard("[Space][ArrowDown][ArrowDown][Space]");
+    await waitFor(() => expect(values()).toEqual(["二つ目", "三つ目", "一つ目"]));
+    await user.click(saveButton());
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists/list"));
+    const saved = await db.checklists.get("list");
+    expect(saved?.items.map((item) => [item.id, item.title, item.checked])).toEqual([
+      ["b", "二つ目", false],
+      ["c", "三つ目", false],
+      ["a", "一つ目", true],
+    ]);
+    const list = await screen.findByRole("list", { name: "項目" });
+    expect(
+      within(list)
+        .getAllByRole("checkbox")
+        .map((c) => (c as HTMLInputElement).checked),
+    ).toEqual([false, false, true]);
+  });
+
+  it("順序を変えただけでも「変更あり」になり、キャンセルで破棄確認を出す", async () => {
+    const { user } = await openWithItems();
+
+    handle(1).focus();
+    await user.keyboard("[Space][ArrowDown][Space]");
+    await waitFor(() => expect(values()).toEqual(["一つ目", "三つ目", "二つ目"]));
+    await user.click(screen.getByRole("button", { name: "キャンセル" }));
+
+    expect(
+      await screen.findByRole("alertdialog", { name: "変更を破棄しますか？" }),
+    ).toBeInTheDocument();
+  });
+
+  it("元の位置に戻して置くと「変更あり」にならない", async () => {
+    const { user, router } = await openWithItems();
+
+    handle(1).focus();
+    await user.keyboard("[Space][ArrowDown][ArrowUp][Space]");
+    await waitFor(() => expect(status()).toHaveTextContent("項目 2 を元の位置に置きました"));
+    expect(values()).toEqual(["一つ目", "二つ目", "三つ目"]);
+    await user.click(screen.getByRole("button", { name: "キャンセル" }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists/list"));
+  });
+
+  it("並び替えた後も、Enter で直下に行を追加し、削除で行が消える", async () => {
+    const { user } = await openWithItems();
+
+    handle(2).focus();
+    await user.keyboard("[Space][ArrowUp][ArrowUp][Space]");
+    await waitFor(() => expect(values()).toEqual(["三つ目", "一つ目", "二つ目"]));
+
+    await user.type(itemInput(0), "{Enter}");
+    expect(values()).toEqual(["三つ目", "", "一つ目", "二つ目"]);
+    expect(itemInput(1)).toHaveFocus();
+    await user.click(screen.getByRole("button", { name: "項目 2 を削除" }));
+    expect(values()).toEqual(["三つ目", "一つ目", "二つ目"]);
   });
 });

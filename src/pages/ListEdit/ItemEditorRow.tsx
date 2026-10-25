@@ -1,4 +1,7 @@
-import { ChevronRight, Trash2 } from "lucide-react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { cn } from "cn";
+import { ChevronRight, GripVertical, Trash2 } from "lucide-react";
 import { type KeyboardEvent, useRef } from "react";
 import { AutoTextarea } from "@/components/AutoTextarea";
 import { Button } from "@/components/ui/button";
@@ -20,6 +23,7 @@ export type ItemRowValue = {
 };
 
 type Props = {
+  /** 行の識別子。SortableList に渡した ids の要素と同じもの */
   rowKey: string;
   index: number;
   value: ItemRowValue;
@@ -33,7 +37,8 @@ type Props = {
 
 /**
  * 編集画面の項目行（画面設計書 3.3 節、4 章の ItemEditorRow）。
- * タイトルと削除ボタン、「詳細」の開閉、開いたときの補足メモ・URL・期限の入力欄。
+ * ドラッグハンドル、タイトルと削除ボタン、「詳細」の開閉、開いたときの補足メモ・URL・期限の入力欄。
+ * SortableList の中で使い、ハンドルから並び替えを始める。
  */
 export function ItemEditorRow({
   rowKey,
@@ -55,12 +60,53 @@ export function ItemEditorRow({
   const syncDue = (input: HTMLInputElement) =>
     onChange({ dueDate: input.value || null, dueDateInvalid: input.validity.badInput });
 
+  const sortable = useSortable({ id: rowKey });
+  // 挿入位置の線。持ち上げた行が上から来るなら自分の下、下から来るなら自分の上に出す（画面設計書 3.3 節）
+  const insertion =
+    sortable.isOver && !sortable.isDragging
+      ? sortable.activeIndex < sortable.index
+        ? "after"
+        : "before"
+      : null;
+
   return (
-    <li className="flex flex-col gap-1">
+    <li
+      ref={sortable.setNodeRef}
+      // 縦 1 列なので横には動かさない。拡大縮小もしない（行の高さが違っても伸ばさない）
+      style={{
+        transform: CSS.Transform.toString(
+          sortable.transform ? { ...sortable.transform, x: 0, scaleX: 1, scaleY: 1 } : null,
+        ),
+        transition: sortable.transition,
+      }}
+      className={cn(
+        "relative flex flex-col gap-1",
+        sortable.isDragging && "opacity-50",
+        // 線は行間（12px）の中央に 2px。色はフォーカスリングと同じ --ring（画面設計書 2.2 節）
+        insertion === "before" &&
+          "before:absolute before:inset-x-0 before:-top-[7px] before:h-0.5 before:bg-ring",
+        insertion === "after" &&
+          "after:absolute after:inset-x-0 after:-bottom-[7px] after:h-0.5 after:bg-ring",
+      )}
+    >
       <div className="flex items-center gap-1">
+        {/* touch-none がないと、長押しの判定中にブラウザがスクロールを始めてしまう。ハンドル以外の場所は普通にスクロールできる */}
+        <Button
+          ref={sortable.setActivatorNodeRef}
+          variant="ghost"
+          size="icon"
+          aria-label={`項目 ${n} を並び替え`}
+          className={cn("touch-none", sortable.isDragging ? "cursor-grabbing" : "cursor-grab")}
+          {...sortable.attributes}
+          {...sortable.listeners}
+        >
+          <GripVertical aria-hidden="true" />
+        </Button>
+        {/* min-w-0 がないと、ハンドルと削除ボタンを足したときに入力欄が画面幅からはみ出す */}
         <Input
           ref={(element) => registerRef("title", element)}
           aria-label={`項目 ${n}`}
+          className="min-w-0 flex-1"
           value={value.title}
           aria-invalid={errors.title ? true : undefined}
           aria-describedby={described("title")}
@@ -75,7 +121,7 @@ export function ItemEditorRow({
 
       <Button
         variant="ghost"
-        className="self-start"
+        className="ml-11 self-start"
         aria-label={`項目 ${n} の詳細`}
         aria-expanded={value.expanded}
         aria-controls={detailsId}
@@ -86,7 +132,7 @@ export function ItemEditorRow({
       </Button>
 
       {value.expanded && (
-        <div id={detailsId} className="ml-3 flex flex-col gap-3 border-l-2 border-border pl-3">
+        <div id={detailsId} className="ml-14 flex flex-col gap-3 border-l-2 border-border pl-3">
           <div className="flex flex-col gap-1">
             <Label htmlFor={id("note")}>補足メモ</Label>
             <AutoTextarea

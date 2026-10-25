@@ -79,7 +79,7 @@ shadcn/ui のテーマトークンを CSS 変数として `src/index.css` に定
 | `--background` / `--foreground` | 画面背景 / 本文 | shadcn 標準 |
 | `--card` / `--card-foreground` | カード、入力欄の背景 / その文字 | shadcn 標準 |
 | `--muted` / `--muted-foreground` | 補助領域 / 補助文字（日時、プレースホルダ） | shadcn 標準 |
-| `--border` / `--input` / `--ring` | 罫線 / 入力欄の枠 / フォーカスリング | shadcn 標準 |
+| `--border` / `--input` / `--ring` | 罫線 / 入力欄の枠 / フォーカスリング | shadcn 標準。`--ring` は強調線（ドラッグの挿入位置、ドロップ領域の枠）にも使う。shadcn の `--accent` はホバー時の背景色（ライトでほぼ白）なので、強調には使わない |
 | `--primary` / `--primary-foreground` | 主ボタン、チェック済み、進捗バー | shadcn 標準 |
 | `--destructive` | 削除、期限超過 | shadcn 標準 |
 | `--warning` | 今日が期限 | 本アプリで追加。ライト `#b45309`、ダーク `#fbbf24`（ライトは当初 `#d97706` だったが、白の背景で 3.19:1 だったため調整した） |
@@ -247,7 +247,7 @@ shadcn/ui のテーマトークンを CSS 変数として `src/index.css` に定
 - マウス: ハンドルを押してドラッグ。
 - タッチ: ハンドルを 150ms 長押ししてからドラッグ（スクロールと区別するため）。
 - キーボード: ハンドルにフォーカス → Space で持ち上げ → ↑↓ で移動 → Space で確定、Esc で取り消し。
-- ドラッグ中は行を半透明にし、挿入位置に 2px の `--accent` 線を出す。
+- ドラッグ中は行を半透明にし、挿入位置に 2px の `--ring` 線を出す（2.2 節）。
 
 **状態**: 7.1 節の状態遷移に従う。
 
@@ -279,7 +279,7 @@ shadcn/ui のテーマトークンを CSS 変数として `src/index.css` に定
 | 状態 | 表示 |
 | --- | --- |
 | 初期 | ドロップ領域（点線枠）と「ファイルを選択」（`<input type="file" accept=".json,application/json">`）。スマートフォンではドロップ領域の文言を「ファイルを選択してください」にする |
-| ドラッグオーバー | 枠を `--accent` の実線にし背景を薄く着色 |
+| ドラッグオーバー | 枠を `--ring` の実線にし背景を薄く着色 |
 | 検証中 | ドロップ領域の中にスピナー。20 MB（20,000,000 バイト。データ設計書 5.3 節）を超えるファイルは読まずにエラー |
 | エラー | ドロップ領域の下に `--danger` の枠で文言（6 章）を出す。`VALIDATION` は違反箇所を「項目 3 の URL: http または https の URL を入力してください」の形で最大 10 件列挙。領域は残り、別のファイルを選び直せる |
 | プレビュー | ファイル名、タイトル、タグ、説明（先頭 3 行）、項目数、項目タイトルを最大 20 件（以降は「ほか N 件」）。「取り込む」で `importChecklist` → 詳細へ。「別のファイル」で初期状態へ |
@@ -349,7 +349,7 @@ shadcn/ui のテーマトークンを CSS 変数として `src/index.css` に定
 | `ChecklistCard` | 一覧のカード | `checklist: Checklist` | なし（内部で `Link`） |
 | `ChecklistItemRow` | 詳細の項目行 | `item: ChecklistItem`, `dueState: "overdue" \| "today" \| "normal"` | `onToggle(checked)` |
 | `ItemEditorRow` | 編集の項目行（ハンドル、入力、詳細開閉） | `item: ChecklistItemInput`, `errors?`, `expanded` | `onChange(item)`, `onRemove()`, `onEnter()`, `onToggleExpand()` |
-| `SortableList` | dnd-kit のラッパ | `ids: string[]`, `renderRow` | `onReorder(from, to)` |
+| `SortableList` | dnd-kit のラッパ。行は `children` として渡し、各行が `useSortable` でハンドルを持つ | `ids: string[]`, `children` | `onReorder(from, to)` |
 | `ConfirmDialog` | 確認ダイアログ | `open`, `title`, `message`, `confirmLabel`, `danger?`, `confirmInput?: string`（一致するまで確定不可） | `onConfirm`, `onCancel` |
 | `ActionMenu` | 「…」メニュー（ボトムシート／ドロップダウン） | `items: {label, icon, danger?, onSelect}[]` | なし |
 | `Toast` | 下部通知 | `message`, `actionLabel?`, `duration?` | `onAction?` |
@@ -536,8 +536,8 @@ pending: Map<string, number>; // その項目で完了していない toggleItem
 - チェックボックスは `<input type="checkbox">` を使い、独自描画する場合も `input` を視覚的に隠すだけで DOM に残す。
 - ダイアログは `role="dialog"` と `aria-modal="true"`、`aria-labelledby` でタイトルを指す。
 - 進捗バーは `role="progressbar"` と `aria-valuenow / aria-valuemax`。
-- ドラッグ並び替えはキーボード操作を必ず提供し、操作中の位置を `aria-live="polite"` で読み上げる（dnd-kit の `announcements` を日本語化）。
-- フォーカスリングは消さない。`:focus-visible` で 2px の `--accent` を出す。
+- ドラッグ並び替えはキーボード操作を必ず提供し、操作中の位置を `aria-live="polite"` で読み上げる。dnd-kit 自身の読み上げ領域は `aria-live="assertive"` で変えられないため、`announcements` は空にして、`polite` の領域を自前に持ち日本語の文言（「項目 2 を持ち上げました」「項目 2 を 3 番目に移動しました」「項目 2 を 3 番目に置きました」「並び替えを取り消しました」）を流す。ハンドルの操作説明（`screenReaderInstructions`）も日本語にする。
+- フォーカスリングは消さない。`:focus-visible` で 2px の `--ring` を出す。
 - 文字サイズを 200% に拡大しても横スクロールが出ないことを確認する。
 
 ## 9. 未決事項

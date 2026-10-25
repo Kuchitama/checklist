@@ -1,3 +1,4 @@
+import { arrayMove } from "@dnd-kit/sortable";
 import { useLiveQuery } from "dexie-react-hooks";
 import { Plus } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
@@ -9,6 +10,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LoadErrorState } from "@/components/LoadErrorState";
 import { NotFoundState } from "@/components/NotFoundState";
+import { SortableList } from "@/components/SortableList";
 import { TagInput, tagLimitError, toTag } from "@/components/TagInput";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,7 +105,7 @@ function toErrors(issues: ValidationIssue[], rows: Row[]): Errors {
 
 /**
  * 新規作成（`#/lists/new`）と編集（`#/lists/:id/edit`）の画面（画面設計書 3.3 節、仕様書 5.3 節）。
- * タイトル・説明・タグと、項目（タイトル、補足メモ・URL・期限）を入力する。並び替えは後続の Issue で加える。
+ * タイトル・説明・タグと、項目（タイトル、補足メモ・URL・期限、並び順）を入力する。
  */
 export function ListEdit() {
   const { id } = useParams();
@@ -226,6 +228,11 @@ function ListEditor(props: EditorProps) {
       items: undefined,
       rows: { ...current.rows, [key]: {} },
     }));
+  };
+
+  /** 行を from から to へ動かす。エラーは行の key で引くので、並び替えても対応は崩れない */
+  const moveRow = (from: number, to: number) => {
+    setRows((current) => arrayMove(current, from, to));
   };
 
   const onTitleKeyDown = (event: KeyboardEvent<HTMLInputElement>, index: number) => {
@@ -389,25 +396,28 @@ function ListEditor(props: EditorProps) {
           <h2 id="items-heading" className="text-sm font-medium">
             項目
           </h2>
-          <ul className="flex flex-col gap-3">
-            {rows.map((row, index) => (
-              <ItemEditorRow
-                key={row.key}
-                rowKey={row.key}
-                index={index}
-                value={row}
-                errors={errors.rows[row.key] ?? {}}
-                registerRef={(field, element) => {
-                  const name = `${row.key}:${field}`;
-                  if (element) fieldRefs.current.set(name, element);
-                  else fieldRefs.current.delete(name);
-                }}
-                onChange={(patch) => updateRow(row.key, patch)}
-                onRemove={() => removeRow(row.key)}
-                onTitleKeyDown={(event) => onTitleKeyDown(event, index)}
-              />
-            ))}
-          </ul>
+          {/* 並び順は rows の順。「変更あり」の判定（changed）にも順序が効く */}
+          <SortableList ids={rows.map((row) => row.key)} onReorder={moveRow}>
+            <ul className="flex flex-col gap-3">
+              {rows.map((row, index) => (
+                <ItemEditorRow
+                  key={row.key}
+                  rowKey={row.key}
+                  index={index}
+                  value={row}
+                  errors={errors.rows[row.key] ?? {}}
+                  registerRef={(field, element) => {
+                    const name = `${row.key}:${field}`;
+                    if (element) fieldRefs.current.set(name, element);
+                    else fieldRefs.current.delete(name);
+                  }}
+                  onChange={(patch) => updateRow(row.key, patch)}
+                  onRemove={() => removeRow(row.key)}
+                  onTitleKeyDown={(event) => onTitleKeyDown(event, index)}
+                />
+              ))}
+            </ul>
+          </SortableList>
           {errors.items && <FieldError id="items-error">{errors.items}</FieldError>}
           <Button variant="outline" className="self-start" onClick={() => insertRow(rows.length)}>
             <Plus aria-hidden="true" />
