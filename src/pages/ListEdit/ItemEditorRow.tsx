@@ -82,11 +82,11 @@ export function ItemEditorRow({
       className={cn(
         "relative flex flex-col gap-1",
         sortable.isDragging && "opacity-50",
-        // 線は行間（12px）の中央に 2px。色はフォーカスリングと同じ --ring（画面設計書 2.2 節）
+        // 線は行間（12px）の中央に 2px。色は --primary（--ring は白の背景で 2.59:1 と、非テキストに必要な 3:1 を満たさない。画面設計書 2.2 節）
         insertion === "before" &&
-          "before:absolute before:inset-x-0 before:-top-[7px] before:h-0.5 before:bg-ring",
+          "before:absolute before:inset-x-0 before:-top-[7px] before:h-0.5 before:bg-primary",
         insertion === "after" &&
-          "after:absolute after:inset-x-0 after:-bottom-[7px] after:h-0.5 after:bg-ring",
+          "after:absolute after:inset-x-0 after:-bottom-[7px] after:h-0.5 after:bg-primary",
       )}
     >
       <div className="flex items-center gap-1">
