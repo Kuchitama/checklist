@@ -1,5 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { FileUp, Plus } from "lucide-react";
+import { FileUp, Plus, Settings as SettingsIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { AppShell } from "@/components/AppShell";
@@ -18,7 +18,16 @@ import { useDebouncedValue } from "@/lib/useDebouncedValue";
  */
 export function ListIndex() {
   return (
-    <AppShell>
+    <AppShell
+      actions={
+        // ヘッダー右端の歯車（画面設計書 2.1 節）
+        <Button asChild variant="ghost" size="icon" className="-mr-2">
+          <Link to="/settings" aria-label="設定">
+            <SettingsIcon aria-hidden="true" />
+          </Link>
+        </Button>
+      }
+    >
       <ErrorBoundary fallback={(error, reset) => <LoadErrorState error={error} onRetry={reset} />}>
         <ListIndexContent />
       </ErrorBoundary>

@@ -3,6 +3,7 @@ import { Import } from "@/pages/Import/Import";
 import { ListDetail } from "@/pages/ListDetail/ListDetail";
 import { ListEdit } from "@/pages/ListEdit/ListEdit";
 import { ListIndex } from "@/pages/ListIndex/ListIndex";
+import { Settings } from "@/pages/Settings/Settings";
 import { App } from "./App";
 import { RootError } from "./RootError";
 
@@ -19,6 +20,7 @@ export const routes: RouteObject[] = [
       { path: "lists/:id", element: <ListDetail /> },
       { path: "lists/:id/edit", element: <ListEdit /> },
       { path: "import", element: <Import /> },
+      { path: "settings", element: <Settings /> },
     ],
   },
 ];

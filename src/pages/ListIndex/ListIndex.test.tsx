@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { searchChecklists } from "@/domain/checklists";
 import type { ChecklistItem } from "@/domain/types";
 import { makeChecklist } from "@/test/fixtures";
-import { renderWithRouter } from "@/test/render";
+import { renderApp, renderWithRouter } from "@/test/render";
 import { ListIndex } from "./ListIndex";
 
 // 検索の呼び出しを数えるため、searchChecklists だけ差し替えられるようにする（既定は本物を呼ぶ）
@@ -398,5 +398,18 @@ describe("ListIndex のタグ絞り込み", () => {
       expect(titles()).toEqual(["リリース手順", "旅行の持ち物", "朝のルーティン"]),
     );
     expect(searchChecklists).toHaveBeenLastCalledWith("", []);
+  });
+});
+
+describe("ListIndex のヘッダー", () => {
+  it("右端の歯車から設定画面へ行ける", async () => {
+    const user = userEvent.setup();
+    const { router } = renderApp("/");
+    await screen.findByText("まだチェックリストがありません");
+    const gear = screen.getByRole("link", { name: "設定" });
+    expect(gear).toHaveAttribute("href", "/settings");
+    await user.click(gear);
+    expect(await screen.findByRole("heading", { level: 1, name: "設定" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/settings");
   });
 });
