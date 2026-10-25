@@ -46,19 +46,23 @@ export function DropZone({ accept, busy = false, onFile }: Props) {
             <br />
             または
           </p>
-          {/* input は見えない位置に置き、label をボタンの見た目にする。input 自体にフォーカスできるのでキーボードでも開ける */}
+          {/* input は見えない位置に置き、label をボタンの見た目にする。input 自体にフォーカスできるのでキーボードでも開ける。
+              フォーカスは見えない input に当たるので、peer で label にフォーカスリングを出す（画面設計書 8 章） */}
           <input
             id={inputId}
             ref={inputRef}
             type="file"
             accept={accept}
             aria-label="ファイルを選択"
-            className="sr-only"
+            className="peer sr-only"
             onChange={onChange}
           />
           <label
             htmlFor={inputId}
-            className={cn(buttonVariants({ variant: "secondary" }), "cursor-pointer")}
+            className={cn(
+              buttonVariants({ variant: "secondary" }),
+              "cursor-pointer peer-focus-visible:border-ring peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50",
+            )}
           >
             ファイルを選択
           </label>

@@ -68,6 +68,11 @@ describe("Import（読み込み画面）", () => {
     await openImport();
 
     expect(fileInput()).toHaveAttribute("accept", ".json,application/json");
+    // フォーカスは sr-only の input に当たるので、見えている label に peer でリングを出す
+    expect(fileInput()).toHaveClass("peer");
+    expect(screen.getByText("ファイルを選択", { selector: "label" })).toHaveClass(
+      "peer-focus-visible:ring-3",
+    );
     expect(
       screen.getByText("このアプリで書き出した .json ファイルを読み込めます"),
     ).toBeInTheDocument();
