@@ -27,7 +27,7 @@ export function TagFilter({ tags, selected, onToggle }: Props) {
             onClick={() => onToggle(tag)}
             className={cn(
               // 短いタグ（1 文字など）でも幅 44px を保つ。フォーカスリングは不透明な --primary（--ring は白で 2.59:1 と 3:1 を満たさない。画面設計書 8 章）
-              "inline-flex h-11 min-w-11 max-w-full items-center justify-center rounded-full border px-4 text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+              "inline-flex h-11 min-w-11 max-w-full items-center justify-center rounded-full border px-4 text-sm transition-colors outline-hidden focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
               pressed
                 ? "border-primary bg-primary text-primary-foreground"
                 : "border-border bg-secondary text-secondary-foreground hover:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)]",
