@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
 import { createChecklist, updateChecklist } from "@/domain/checklists";
+import { ChecklistValidationError } from "@/domain/errors";
+import { messageFor } from "@/domain/schema";
 import type { Checklist } from "@/domain/types";
 import { makeChecklist, makeItem } from "@/test/fixtures";
 import { renderApp } from "@/test/render";
@@ -428,6 +430,23 @@ describe("ListEdit（編集）", () => {
     expect(router.state.location.pathname).toBe("/lists/list/edit");
   });
 
+  it("保存時に項目の id が不正（別の画面で消された項目）なら、その行のタイトルにエラーを出して止める", async () => {
+    await db.checklists.put(existing());
+    const message = messageFor("unknown_id", undefined);
+    vi.mocked(updateChecklist).mockRejectedValueOnce(
+      new ChecklistValidationError([{ path: ["items", 1, "id"], code: "unknown_id", message }]),
+    );
+    const { user, router } = await openEdit();
+    await screen.findByRole("heading", { name: "リストを編集" });
+
+    await user.click(saveButton());
+
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(itemInput(1)).toHaveAccessibleDescription(message);
+    expect(itemInput(1)).toHaveFocus();
+    expect(router.state.location.pathname).toBe("/lists/list/edit");
+  });
+
   it("編集中に別のリストの編集画面へ直接遷移すると、表示と保存先がそのリストに切り替わる", async () => {
     await db.checklists.bulkPut([
       existing(),
@@ -672,5 +691,221 @@ describe("ListEdit（説明とタグ）", () => {
     expect(
       await screen.findByRole("alertdialog", { name: "変更を破棄しますか？" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("ListEdit（項目の詳細）", () => {
+  const detailsToggle = (index: number) =>
+    screen.getByRole("button", { name: `項目 ${index + 1} の詳細` });
+  const noteInput = (index: number) =>
+    screen.getByRole("textbox", { name: `項目 ${index + 1} の補足メモ` });
+  const urlInput = (index: number) =>
+    screen.getByRole("textbox", { name: `項目 ${index + 1} の URL` });
+  const dueInput = (index: number) => screen.getByLabelText(`項目 ${index + 1} の期限`);
+  const setDue = (index: number, value: string) =>
+    fireEvent.change(dueInput(index), { target: { value } });
+
+  afterEach(async () => {
+    toast.dismiss();
+    vi.restoreAllMocks();
+    vi.mocked(createChecklist).mockClear();
+    vi.mocked(updateChecklist).mockClear();
+    await db.checklists.clear();
+  });
+
+  it("「詳細」を開くとメモ・URL・期限の欄が出る。新しい行は閉じている", async () => {
+    const { user } = await openNew();
+    await user.click(screen.getByRole("button", { name: "項目を追加" }));
+
+    expect(detailsToggle(0)).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("textbox", { name: "項目 1 の補足メモ" })).not.toBeInTheDocument();
+
+    await user.click(detailsToggle(0));
+
+    expect(detailsToggle(0)).toHaveAttribute("aria-expanded", "true");
+    expect(noteInput(0)).toBeInTheDocument();
+    expect(urlInput(0)).toHaveAttribute("inputmode", "url");
+    expect(dueInput(0)).toHaveAttribute("type", "date");
+  });
+
+  it("メモ・URL・期限を入れて保存すると保存され、詳細画面に表示される", async () => {
+    const { user, router } = await openNew();
+    await user.type(titleInput(), "旅行の持ち物");
+    await user.click(screen.getByRole("button", { name: "項目を追加" }));
+    await user.type(itemInput(0), "パスポート");
+    await user.click(detailsToggle(0));
+    await user.type(noteInput(0), "有効期限を確認{Enter}残り 6 か月以上");
+    await user.type(urlInput(0), "https://example.com/passport");
+    setDue(0, "2099-12-01");
+
+    await user.click(saveButton());
+
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/lists\//));
+    const [saved] = await db.checklists.toArray();
+    expect(saved?.items[0]).toMatchObject({
+      title: "パスポート",
+      note: "有効期限を確認\n残り 6 か月以上",
+      url: "https://example.com/passport",
+      dueDate: "2099-12-01",
+    });
+    expect(await screen.findByText(/有効期限を確認/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "「パスポート」のリンクを開く" })).toHaveAttribute(
+      "href",
+      "https://example.com/passport",
+    );
+    expect(screen.getByText("期限 2099/12/1")).toBeInTheDocument();
+  });
+
+  it("メモ・URL・期限のどれかに値があれば、編集では初期状態で開く", async () => {
+    await db.checklists.put(
+      makeChecklist({
+        id: "list",
+        items: [
+          makeItem({ id: "a", title: "メモあり", note: "予備も" }),
+          makeItem({ id: "b", title: "何もなし" }),
+          makeItem({ id: "c", title: "期限あり", dueDate: "2099-01-05" }),
+        ],
+      }),
+    );
+    renderApp(["/lists/list", "/lists/list/edit"]);
+    await screen.findByRole("heading", { name: "リストを編集" });
+
+    expect(detailsToggle(0)).toHaveAttribute("aria-expanded", "true");
+    expect(noteInput(0)).toHaveValue("予備も");
+    expect(detailsToggle(1)).toHaveAttribute("aria-expanded", "false");
+    expect(detailsToggle(2)).toHaveAttribute("aria-expanded", "true");
+    expect(dueInput(2)).toHaveValue("2099-01-05");
+  });
+
+  it("http(s) 以外の URL は直下にエラーを出し、閉じていた詳細を開いてその欄にフォーカスする", async () => {
+    const { user } = await openNew();
+    await user.type(titleInput(), "旅行の持ち物");
+    await user.click(screen.getByRole("button", { name: "項目を追加" }));
+    await user.type(itemInput(0), "パスポート");
+    await user.click(detailsToggle(0));
+    await user.type(urlInput(0), "ftp://example.com/a");
+    await user.click(detailsToggle(0));
+    expect(screen.queryByRole("textbox", { name: "項目 1 の URL" })).not.toBeInTheDocument();
+
+    await user.click(saveButton());
+
+    expect(
+      await screen.findByText("http または https の URL を入力してください"),
+    ).toBeInTheDocument();
+    expect(urlInput(0)).toHaveAccessibleDescription("http または https の URL を入力してください");
+    await waitFor(() => expect(urlInput(0)).toHaveFocus());
+    expect(await db.checklists.count()).toBe(0);
+  });
+
+  it("補足メモが 2000 文字を超えたら直下にエラーを出す", async () => {
+    const { user } = await openNew();
+    await user.type(titleInput(), "旅行の持ち物");
+    await user.click(screen.getByRole("button", { name: "項目を追加" }));
+    await user.type(itemInput(0), "パスポート");
+    await user.click(detailsToggle(0));
+    await user.click(noteInput(0));
+    await user.paste("あ".repeat(2001));
+
+    await user.click(saveButton());
+
+    expect(await screen.findByText("補足メモは 2000 文字以内です")).toBeInTheDocument();
+    expect(noteInput(0)).toHaveFocus();
+  });
+
+  it("期限の「クリア」で期限を消せる。空の URL と期限は null で保存する", async () => {
+    await db.checklists.put(
+      makeChecklist({
+        id: "list",
+        items: [
+          makeItem({
+            id: "a",
+            title: "パスポート",
+            url: "https://example.com/a",
+            dueDate: "2099-01-05",
+          }),
+        ],
+      }),
+    );
+    const user = userEvent.setup();
+    const { router } = renderApp(["/lists/list", "/lists/list/edit"]);
+    await screen.findByRole("heading", { name: "リストを編集" });
+
+    await user.click(screen.getByRole("button", { name: "項目 1 の期限をクリア" }));
+    expect(dueInput(0)).toHaveValue("");
+    await user.clear(urlInput(0));
+    await user.click(saveButton());
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists/list"));
+    expect((await db.checklists.get("list"))?.items[0]).toMatchObject({ url: null, dueDate: null });
+  });
+
+  /** ブラウザが不正・未完成の日付入力と判定している状態（value は空のまま）にする */
+  const markBadInput = (input: HTMLElement, badInput: boolean) =>
+    Object.defineProperty(input, "validity", { value: { badInput }, configurable: true });
+
+  it("日付欄に不正・未完成の入力が残っていれば、期限なしとして保存せずエラーを出してフォーカスする", async () => {
+    await db.checklists.put(
+      makeChecklist({ id: "list", items: [makeItem({ id: "a", title: "パスポート" })] }),
+    );
+    const user = userEvent.setup();
+    const { router } = renderApp(["/lists/list", "/lists/list/edit"]);
+    await screen.findByRole("heading", { name: "リストを編集" });
+    await user.click(detailsToggle(0));
+    markBadInput(dueInput(0), true);
+
+    await user.click(saveButton());
+
+    expect(await screen.findByText("存在する日付を入力してください")).toBeInTheDocument();
+    expect(dueInput(0)).toHaveAccessibleDescription("存在する日付を入力してください");
+    expect(dueInput(0)).toHaveFocus();
+    expect(updateChecklist).not.toHaveBeenCalled();
+    expect(router.state.location.pathname).toBe("/lists/list/edit");
+
+    // 「クリア」で不正な入力を消せば保存できる
+    await user.click(screen.getByRole("button", { name: "項目 1 の期限をクリア" }));
+    expect(screen.queryByText("存在する日付を入力してください")).not.toBeInTheDocument();
+    // ブラウザは value を空にすると badInput も消す。jsdom では判定を持たないので手で戻す
+    markBadInput(dueInput(0), false);
+    await user.click(saveButton());
+    await waitFor(() => expect(router.state.location.pathname).toBe("/lists/list"));
+  });
+
+  it("不正な日付入力のまま「詳細」を閉じても保存を止め、開いてその欄にフォーカスする", async () => {
+    await db.checklists.put(
+      makeChecklist({ id: "list", items: [makeItem({ id: "a", title: "パスポート" })] }),
+    );
+    const user = userEvent.setup();
+    renderApp(["/lists/list", "/lists/list/edit"]);
+    await screen.findByRole("heading", { name: "リストを編集" });
+    await user.click(detailsToggle(0));
+    markBadInput(dueInput(0), true);
+    fireEvent.blur(dueInput(0));
+    await user.click(detailsToggle(0));
+    expect(detailsToggle(0)).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(saveButton());
+
+    expect(await screen.findByText("存在する日付を入力してください")).toBeInTheDocument();
+    expect(detailsToggle(0)).toHaveAttribute("aria-expanded", "true");
+    expect(dueInput(0)).toHaveFocus();
+    expect(updateChecklist).not.toHaveBeenCalled();
+  });
+
+  it("メモを変えると破棄確認の対象になる", async () => {
+    await db.checklists.put(
+      makeChecklist({ id: "list", items: [makeItem({ id: "a", title: "パスポート" })] }),
+    );
+    const user = userEvent.setup();
+    const { router } = renderApp(["/lists/list", "/lists/list/edit"]);
+    await screen.findByRole("heading", { name: "リストを編集" });
+    await user.click(detailsToggle(0));
+    await user.type(noteInput(0), "予備も");
+
+    await user.click(screen.getByRole("button", { name: "キャンセル" }));
+
+    expect(
+      await screen.findByRole("alertdialog", { name: "変更を破棄しますか？" }),
+    ).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/lists/list/edit");
   });
 });

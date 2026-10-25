@@ -1,5 +1,5 @@
 import { useLiveQuery } from "dexie-react-hooks";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus } from "lucide-react";
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { useBlocker, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
@@ -16,22 +16,15 @@ import { Label } from "@/components/ui/label";
 import { createChecklist, getChecklist, updateChecklist } from "@/domain/checklists";
 import { ChecklistValidationError } from "@/domain/errors";
 import { normalizeChecklistInput } from "@/domain/normalize";
-import { validateChecklistInput } from "@/domain/schema";
+import { messageFor, validateChecklistInput } from "@/domain/schema";
 import type { Checklist, ChecklistInput, ValidationIssue } from "@/domain/types";
+import { ItemEditorRow, type ItemField, type ItemRowValue } from "./ItemEditorRow";
 
 /**
  * 項目の行。key は React の描画とフォーカス移動のための画面内だけの識別子。
  * id は既存項目だけが持つ（保存時にチェック状態を引き継ぐ。データ設計書 4.1 節）。
- * note / url / dueDate は入力欄ができるまで、読み込んだ値をそのまま保って保存する。
  */
-type Row = {
-  key: string;
-  id?: string;
-  title: string;
-  note: string;
-  url: string | null;
-  dueDate: string | null;
-};
+type Row = ItemRowValue & { key: string; id?: string };
 
 /** 入力欄ごとのエラー文言。項目は行の key で引く（行の追加・削除で位置がずれても対応が崩れない） */
 type Errors = {
@@ -39,8 +32,13 @@ type Errors = {
   description?: string;
   tags?: string;
   items?: string;
-  rows: Record<string, string>;
+  rows: Record<string, Partial<Record<ItemField, string>>>;
 };
+
+const ITEM_FIELDS: ItemField[] = ["title", "note", "url", "dueDate"];
+
+/** フォーカスを移す先。項目は行の key と欄の名前で指す */
+type FocusTarget = { key: string; field: ItemField };
 
 const NO_ERRORS: Errors = { rows: {} };
 
@@ -56,7 +54,9 @@ function toInput(
     title,
     description,
     tags: commitTag(tags, tagDraft),
-    items: rows.map(({ key: _key, ...item }) => item),
+    items: rows.map(
+      ({ key: _key, expanded: _expanded, dueDateInvalid: _dueDateInvalid, ...item }) => item,
+    ),
   };
 }
 
@@ -74,6 +74,9 @@ function rowsOf(checklist: Checklist): Row[] {
     note: item.note,
     url: item.url,
     dueDate: item.dueDate,
+    dueDateInvalid: false,
+    // メモ・URL・期限のどれかに値があれば、初期状態で「詳細」を開く（画面設計書 3.3 節）
+    expanded: item.note !== "" || item.url !== null || item.dueDate !== null,
   }));
 }
 
@@ -87,7 +90,12 @@ function toErrors(issues: ValidationIssue[], rows: Row[]): Errors {
     else if (field === "tags") errors.tags ??= issue.message;
     else if (field === "items" && typeof index === "number") {
       const key = rows[index]?.key;
-      if (key && !errors.rows[key]) errors.rows[key] = issue.message;
+      // id の不正（別の画面で消された項目など。データ設計書 4.1 節）は入力欄がないので、その行のタイトルに出す
+      const itemField = issue.path[2] === "id" ? "title" : issue.path[2];
+      if (key && typeof itemField === "string" && ITEM_FIELDS.includes(itemField as ItemField)) {
+        errors.rows[key] ??= {};
+        errors.rows[key][itemField as ItemField] ??= issue.message;
+      }
     } else if (field === "items") errors.items ??= issue.message;
   }
   return errors;
@@ -95,7 +103,7 @@ function toErrors(issues: ValidationIssue[], rows: Row[]): Errors {
 
 /**
  * 新規作成（`#/lists/new`）と編集（`#/lists/:id/edit`）の画面（画面設計書 3.3 節、仕様書 5.3 節）。
- * タイトル・説明・タグと項目タイトルを入力する。項目の詳細（メモ・URL・期限）と並び替えは後続の Issue で加える。
+ * タイトル・説明・タグと、項目（タイトル、補足メモ・URL・期限）を入力する。並び替えは後続の Issue で加える。
  */
 export function ListEdit() {
   const { id } = useParams();
@@ -156,8 +164,8 @@ function ListEditor(props: EditorProps) {
   const titleRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
   const tagRef = useRef<HTMLInputElement>(null);
-  const rowRefs = useRef(new Map<string, HTMLInputElement>());
-  const [focusKey, setFocusKey] = useState<string | null>(null);
+  const fieldRefs = useRef(new Map<string, HTMLElement>());
+  const [focusTarget, setFocusTarget] = useState<FocusTarget | null>(null);
   // 保存に成功したら、詳細への遷移を破棄確認で止めない
   const saved = useRef(false);
 
@@ -179,23 +187,36 @@ function ListEditor(props: EditorProps) {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [changed]);
 
-  // 行を追加したら、描画後にその行へフォーカスを移す
+  // 行の追加やエラー表示の後、描画が終わってから目的の欄へフォーカスを移す（閉じていた「詳細」を開いた直後でも届く）
   useEffect(() => {
-    if (focusKey === null) return;
-    rowRefs.current.get(focusKey)?.focus();
-    setFocusKey(null);
-  }, [focusKey]);
+    if (focusTarget === null) return;
+    fieldRefs.current.get(`${focusTarget.key}:${focusTarget.field}`)?.focus();
+    setFocusTarget(null);
+  }, [focusTarget]);
 
   const insertRow = (index: number) => {
     const key = crypto.randomUUID();
-    const row: Row = { key, title: "", note: "", url: null, dueDate: null };
+    const row: Row = {
+      key,
+      title: "",
+      note: "",
+      url: null,
+      dueDate: null,
+      dueDateInvalid: false,
+      expanded: false,
+    };
     setRows((current) => [...current.slice(0, index), row, ...current.slice(index)]);
-    setFocusKey(key);
+    setFocusTarget({ key, field: "title" });
   };
 
-  const updateRow = (key: string, value: string) => {
-    setRows((current) => current.map((row) => (row.key === key ? { ...row, title: value } : row)));
-    setErrors((current) => ({ ...current, rows: { ...current.rows, [key]: "" } }));
+  const updateRow = (key: string, patch: Partial<ItemRowValue>) => {
+    setRows((current) => current.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+    // 変えた欄のエラーを消す
+    setErrors((current) => {
+      const row = { ...current.rows[key] };
+      for (const field of ITEM_FIELDS) if (field in patch) row[field] = undefined;
+      return { ...current, rows: { ...current.rows, [key]: row } };
+    });
   };
 
   const removeRow = (key: string) => {
@@ -203,24 +224,41 @@ function ListEditor(props: EditorProps) {
     setErrors((current) => ({
       ...current,
       items: undefined,
-      rows: { ...current.rows, [key]: "" },
+      rows: { ...current.rows, [key]: {} },
     }));
   };
 
-  const onRowKeyDown = (event: KeyboardEvent<HTMLInputElement>, index: number) => {
+  const onTitleKeyDown = (event: KeyboardEvent<HTMLInputElement>, index: number) => {
     // IME の変換確定の Enter では行を追加しない
     if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
     event.preventDefault();
     insertRow(index + 1);
   };
 
-  /** 最初のエラー欄（タイトル → 説明 → タグ → 項目の順）にフォーカスを移す */
+  /**
+   * 最初のエラー欄（タイトル → 説明 → タグ → 項目の順。項目の中はタイトル → メモ → URL → 期限）にフォーカスを移す。
+   * エラー欄が閉じた「詳細」の中にあれば、開いてからフォーカスする
+   */
   const focusFirstError = (next: Errors) => {
     if (next.title) return titleRef.current?.focus();
     if (next.description) return descriptionRef.current?.focus();
     if (next.tags) return tagRef.current?.focus();
-    const firstRow = rows.find((row) => next.rows[row.key]);
-    if (firstRow) rowRefs.current.get(firstRow.key)?.focus();
+    for (const row of rows) {
+      const field = ITEM_FIELDS.find((f) => next.rows[row.key]?.[f]);
+      if (!field) continue;
+      if (field !== "title" && !row.expanded) updateRow(row.key, { expanded: true });
+      setFocusTarget({ key: row.key, field });
+      return;
+    }
+  };
+
+  /**
+   * 日付欄に不正・未完成の入力が残っているか。欄が出ていればその時点のブラウザの判定を見る
+   * （「詳細」を閉じて開き直すと未完成の入力は消えるので、記録した旗だけで判定すると止まり続ける）
+   */
+  const hasBadDueInput = (row: Row) => {
+    const element = fieldRefs.current.get(`${row.key}:dueDate`);
+    return element instanceof HTMLInputElement ? element.validity.badInput : row.dueDateInvalid;
   };
 
   const showIssues = (issues: ValidationIssue[]) => {
@@ -237,6 +275,16 @@ function ListEditor(props: EditorProps) {
     if (draftProblem) {
       setErrors((current) => ({ ...current, tags: draftProblem }));
       tagRef.current?.focus();
+      return;
+    }
+    // 不正・未完成の日付（value は空）を期限なしとして保存しないよう、その欄にエラーを出して止める
+    const badDue = rows.filter(hasBadDueInput);
+    if (badDue.length > 0) {
+      const next: Errors = { rows: {} };
+      for (const row of badDue)
+        next.rows[row.key] = { dueDate: messageFor("invalid_date", "期限") };
+      setErrors(next);
+      focusFirstError(next);
       return;
     }
     const input = toInput(title, description, tags, tagDraft, rows);
@@ -341,38 +389,24 @@ function ListEditor(props: EditorProps) {
           <h2 id="items-heading" className="text-sm font-medium">
             項目
           </h2>
-          <ul className="flex flex-col gap-2">
-            {rows.map((row, index) => {
-              const error = errors.rows[row.key];
-              const errorId = `item-${row.key}-error`;
-              return (
-                <li key={row.key} className="flex flex-col gap-1">
-                  <div className="flex items-center gap-1">
-                    <Input
-                      ref={(element) => {
-                        if (element) rowRefs.current.set(row.key, element);
-                        else rowRefs.current.delete(row.key);
-                      }}
-                      aria-label={`項目 ${index + 1}`}
-                      value={row.title}
-                      aria-invalid={error ? true : undefined}
-                      aria-describedby={error ? errorId : undefined}
-                      onChange={(event) => updateRow(row.key, event.target.value)}
-                      onKeyDown={(event) => onRowKeyDown(event, index)}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`項目 ${index + 1} を削除`}
-                      onClick={() => removeRow(row.key)}
-                    >
-                      <Trash2 aria-hidden="true" />
-                    </Button>
-                  </div>
-                  {error && <FieldError id={errorId}>{error}</FieldError>}
-                </li>
-              );
-            })}
+          <ul className="flex flex-col gap-3">
+            {rows.map((row, index) => (
+              <ItemEditorRow
+                key={row.key}
+                rowKey={row.key}
+                index={index}
+                value={row}
+                errors={errors.rows[row.key] ?? {}}
+                registerRef={(field, element) => {
+                  const name = `${row.key}:${field}`;
+                  if (element) fieldRefs.current.set(name, element);
+                  else fieldRefs.current.delete(name);
+                }}
+                onChange={(patch) => updateRow(row.key, patch)}
+                onRemove={() => removeRow(row.key)}
+                onTitleKeyDown={(event) => onTitleKeyDown(event, index)}
+              />
+            ))}
           </ul>
           {errors.items && <FieldError id="items-error">{errors.items}</FieldError>}
           <Button variant="outline" className="self-start" onClick={() => insertRow(rows.length)}>
