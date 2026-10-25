@@ -1,19 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db } from "@/db";
-import { makeBoundaryMaxInput, makeChecklist, makeChecklistInput, makeItem } from "@/test/fixtures";
+import {
+  EMOJI_TITLE,
+  makeBoundaryMaxInput,
+  makeChecklist,
+  makeChecklistInput,
+  makeItem,
+  repeat,
+} from "@/test/fixtures";
 import {
   createChecklist,
   deleteChecklist,
+  duplicateChecklist,
   exportChecklist,
   getChecklist,
   listChecklists,
   resetChecklist,
+  searchChecklists,
   serializeExportFile,
   toggleItem,
   updateChecklist,
 } from "./checklists";
 import { ChecklistNotFoundError, ChecklistValidationError } from "./errors";
-import { exportFileV1Schema } from "./schema";
+import { cpLength, exportFileV1Schema } from "./schema";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -530,5 +539,197 @@ describe("exportChecklist / serializeExportFile", () => {
     expect(parsed.success).toBe(true);
     expect(parsed.data?.checklist.items).toHaveLength(500);
     expect(parsed.data?.checklist.tags).toHaveLength(20);
+  });
+});
+
+describe("duplicateChecklist", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-25T01:02:03.004Z"));
+  });
+
+  afterEach(async () => {
+    vi.useRealTimers();
+    await db.checklists.clear();
+  });
+
+  const source = (title = "リリース手順") =>
+    makeChecklist({
+      id: "list",
+      title,
+      description: "本番前の確認",
+      tags: ["仕事", "リリース"],
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-02T00:00:00.000Z",
+      items: [
+        makeItem({
+          id: "a",
+          title: "CI を確認",
+          url: "https://example.com/ci",
+          checked: true,
+          checkedAt: "2026-10-02T00:00:00.000Z",
+        }),
+        makeItem({ id: "b", title: "タグを打つ", note: "v2", dueDate: "2026-12-31" }),
+      ],
+    });
+
+  it("「<タイトル> のコピー」で、説明・タグ・項目をコピーし、チェック状態を引き継がない", async () => {
+    await db.checklists.put(source());
+
+    const copy = await duplicateChecklist("list");
+
+    expect(copy.id).toMatch(UUID);
+    expect(copy.id).not.toBe("list");
+    expect(copy.title).toBe("リリース手順 のコピー");
+    expect(copy.description).toBe("本番前の確認");
+    expect(copy.tags).toEqual(["仕事", "リリース"]);
+    expect(copy.createdAt).toBe("2026-10-25T01:02:03.004Z");
+    expect(copy.updatedAt).toBe("2026-10-25T01:02:03.004Z");
+    expect(
+      copy.items.map((i) => [i.title, i.note, i.url, i.dueDate, i.checked, i.checkedAt]),
+    ).toEqual([
+      ["CI を確認", "", "https://example.com/ci", null, false, null],
+      ["タグを打つ", "v2", null, "2026-12-31", false, null],
+    ]);
+    for (const item of copy.items) {
+      expect(item.id).toMatch(UUID);
+      expect(["a", "b"]).not.toContain(item.id);
+    }
+    expect(await db.checklists.get(copy.id)).toEqual(copy);
+    // 元のリストは変わらない
+    expect(await db.checklists.get("list")).toEqual(source());
+    expect(await db.checklists.count()).toBe(2);
+  });
+
+  it("接尾辞込みで 100 文字を超えるタイトルは、先頭 95 コードポイントを trim して接尾辞を付ける", async () => {
+    // title-98（データ設計書 7 章）: 98 + 5 = 103 > 100 → 95 + 5 = 100
+    await db.checklists.put(source(repeat("あ", 98)));
+    const copy98 = await duplicateChecklist("list");
+    expect(cpLength(copy98.title)).toBe(100);
+    expect(copy98.title).toBe(`${repeat("あ", 95)} のコピー`);
+
+    await db.checklists.put(source(repeat("い", 100)));
+    expect((await duplicateChecklist("list")).title).toBe(`${repeat("い", 95)} のコピー`);
+
+    // 95 文字ちょうど + 接尾辞 = 100 は切り詰めない
+    await db.checklists.put(source(repeat("う", 95)));
+    expect((await duplicateChecklist("list")).title).toBe(`${repeat("う", 95)} のコピー`);
+
+    // 切った先頭 95 文字の末尾が空白なら trim される
+    await db.checklists.put(source(`${repeat("え", 94)} ${repeat("お", 5)}`));
+    expect((await duplicateChecklist("list")).title).toBe(`${repeat("え", 94)} のコピー`);
+  });
+
+  it("絵文字と結合文字を含むタイトルはコードポイントで数える", async () => {
+    // EMOJI_TITLE は 8 コードポイント（UTF-16 では 12）。12 回で 96 コードポイント → 95 に切る
+    await db.checklists.put(source(repeat(EMOJI_TITLE, 12)));
+
+    const copy = await duplicateChecklist("list");
+
+    expect(copy.title).toBe(
+      `${Array.from(repeat(EMOJI_TITLE, 12)).slice(0, 95).join("")} のコピー`,
+    );
+    expect(cpLength(copy.title)).toBe(100);
+  });
+
+  it("存在しないリストは ChecklistNotFoundError を投げ、何も書き込まない", async () => {
+    await expect(duplicateChecklist("missing")).rejects.toBeInstanceOf(ChecklistNotFoundError);
+    expect(await db.checklists.count()).toBe(0);
+  });
+});
+
+describe("searchChecklists（データ設計書 4.3 節）", () => {
+  afterEach(async () => {
+    await db.checklists.clear();
+  });
+
+  const seed = () =>
+    db.checklists.bulkPut([
+      makeChecklist({
+        id: "release",
+        title: "リリース手順",
+        tags: ["仕事", "リリース"],
+        updatedAt: "2026-10-03T00:00:00.000Z",
+        items: [
+          makeItem({ id: "r1", title: "CI を確認" }),
+          makeItem({ id: "r2", title: "Tag を打つ" }),
+        ],
+      }),
+      makeChecklist({
+        id: "travel",
+        title: "旅行の持ち物",
+        tags: ["家", "旅行"],
+        updatedAt: "2026-10-02T00:00:00.000Z",
+        items: [
+          makeItem({ id: "t1", title: "パスポート" }),
+          makeItem({ id: "t2", title: "ＡＢＣ 充電器" }),
+        ],
+      }),
+      makeChecklist({
+        id: "morning",
+        title: "朝のルーティン",
+        tags: ["家", "習慣"],
+        updatedAt: "2026-10-01T00:00:00.000Z",
+        items: [makeItem({ id: "m1", title: "ストレッチ" })],
+      }),
+    ]);
+
+  const ids = async (query: string, tags: string[] = []) =>
+    (await searchChecklists(query, tags)).map((c) => c.id);
+
+  it("検索語もタグも空なら全件を updatedAt 降順で返す", async () => {
+    await seed();
+    expect(await ids("")).toEqual(["release", "travel", "morning"]);
+    expect(await ids("   　 ")).toEqual(["release", "travel", "morning"]);
+  });
+
+  it("リスト名または項目名に部分一致するリストを返す", async () => {
+    await seed();
+    expect(await ids("手順")).toEqual(["release"]);
+    expect(await ids("パスポート")).toEqual(["travel"]);
+  });
+
+  it("全角半角と大文字小文字を区別しない（NFKC → 小文字）", async () => {
+    await seed();
+    expect(await ids("abc")).toEqual(["travel"]);
+    expect(await ids("ＡＢＣ")).toEqual(["travel"]);
+    expect(await ids("tag")).toEqual(["release"]);
+    expect(await ids("ＴＡＧ")).toEqual(["release"]);
+  });
+
+  it("空白で区切った語はすべて含むリストだけを返す（順不同）。全角空白でも区切る", async () => {
+    await seed();
+    expect(await ids("リリース CI")).toEqual(["release"]);
+    expect(await ids("CI リリース")).toEqual(["release"]);
+    expect(await ids("リリース　CI")).toEqual(["release"]);
+    expect(await ids("リリース パスポート")).toEqual([]);
+  });
+
+  it("タグは指定したものをすべて持つリストに絞り、完全一致で比べる", async () => {
+    await seed();
+    expect(await ids("", ["家"])).toEqual(["travel", "morning"]);
+    expect(await ids("", ["家", "習慣"])).toEqual(["morning"]);
+    expect(await ids("", ["家", "仕事"])).toEqual([]);
+    // 正規化せず完全一致。部分一致や大文字小文字の同一視はしない
+    expect(await ids("", ["リリー"])).toEqual([]);
+  });
+
+  it("検索語とタグを併用できる", async () => {
+    await seed();
+    expect(await ids("ストレッチ", ["家"])).toEqual(["morning"]);
+    expect(await ids("ストレッチ", ["仕事"])).toEqual([]);
+  });
+
+  it("一致しなければ空配列", async () => {
+    await seed();
+    expect(await ids("存在しない語")).toEqual([]);
+  });
+
+  it("DB の読み取り失敗は呼び出し元へ伝える", async () => {
+    vi.spyOn(db.checklists, "orderBy").mockImplementation(() => {
+      throw new DOMException("読み取り失敗", "UnknownError");
+    });
+    await expect(searchChecklists("a", [])).rejects.toBeInstanceOf(DOMException);
+    vi.restoreAllMocks();
   });
 });

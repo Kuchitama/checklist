@@ -5,7 +5,7 @@
 import { db } from "@/db";
 import { ChecklistNotFoundError, ChecklistValidationError } from "./errors";
 import { normalizeChecklistInput } from "./normalize";
-import { messageFor, validateChecklistInput } from "./schema";
+import { cpLength, messageFor, validateChecklistInput } from "./schema";
 import type {
   Checklist,
   ChecklistInput,
@@ -190,4 +190,67 @@ export function serializeExportFile(file: ExportFile): string {
  */
 export async function importChecklist(file: ExportFile): Promise<Checklist> {
   return createChecklist(file.checklist);
+}
+
+const COPY_SUFFIX = " のコピー";
+const MAX_TITLE = 100;
+
+/** 複製時のタイトル（データ設計書 4.2 節）。接尾辞込みで 100 文字を超えるなら、元の先頭を切って収める */
+export function duplicateTitle(title: string): string {
+  const limit = MAX_TITLE - cpLength(COPY_SUFFIX);
+  const base = cpLength(title) > limit ? Array.from(title).slice(0, limit).join("") : title;
+  return `${base.trim()}${COPY_SUFFIX}`;
+}
+
+/**
+ * リストを複製する（仕様書 5.2 節、データ設計書 4 章、FR-04）。
+ * 新しい id と項目の id を採番し、チェック状態は引き継がない。元のリストは変えない。
+ */
+export async function duplicateChecklist(id: string): Promise<Checklist> {
+  return db.transaction("rw", db.checklists, async () => {
+    const source = await db.checklists.get(id);
+    if (!source) throw new ChecklistNotFoundError(`リストがありません: ${id}`);
+    const timestamp = now();
+    const copy: Checklist = {
+      id: crypto.randomUUID(),
+      title: duplicateTitle(source.title),
+      description: source.description,
+      tags: [...source.tags],
+      items: source.items.map((item) => ({
+        id: crypto.randomUUID(),
+        title: item.title,
+        note: item.note,
+        url: item.url,
+        dueDate: item.dueDate,
+        checked: false,
+        checkedAt: null,
+      })),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    };
+    await db.checklists.add(copy);
+    return copy;
+  });
+}
+
+/** 検索の照合用に正規化する（データ設計書 4.3 節）: NFKC → 小文字。ひらがな化はしない */
+const forMatch = (s: string) => s.normalize("NFKC").toLowerCase();
+
+/**
+ * 検索とタグ絞り込み（仕様書 5.1 節、データ設計書 4.3 節）。
+ * 検索語を空白で分けた語をすべて、リスト名か項目名に含むリスト（AND）。タグは完全一致ですべて持つもの（AND）。
+ * updatedAt 降順。語もタグも空なら全件
+ */
+export async function searchChecklists(query: string, tags: string[]): Promise<Checklist[]> {
+  // NFKC で全角空白は半角空白になるので、\s で分けられる
+  const words = forMatch(query)
+    .split(/\s+/)
+    .filter((w) => w !== "");
+  const all = await listChecklists();
+  return all.filter((checklist) => {
+    if (!tags.every((tag) => checklist.tags.includes(tag))) return false;
+    if (words.length === 0) return true;
+    const haystack = [checklist.title, ...checklist.items.map((item) => item.title)].map(forMatch);
+    return words.every((word) => haystack.some((text) => text.includes(word)));
+  });
 }
