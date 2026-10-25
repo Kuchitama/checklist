@@ -72,6 +72,16 @@ export type ExportFile = {
   };
 };
 
+/** 成功か失敗かを値で返す（例外にしない）結果 */
+export type Result<T, E> = { ok: true; file: T } | { ok: false; error: E };
+
+/** 読み込みファイルが受け入れられない理由（データ設計書 5.3 節）。文言は画面設計書 6.2 節 */
+export type ImportError =
+  | { code: "INVALID_JSON" }
+  | { code: "NOT_EXPORT_FILE" }
+  | { code: "UNSUPPORTED_VERSION"; version: unknown }
+  | { code: "VALIDATION"; issues: ValidationIssue[] };
+
 export type ValidationIssue = {
   /** 例: ["title"], ["items", 3, "url"] */
   path: (string | number)[];

@@ -1,0 +1,9 @@
+{
+  "format": "checklist-export",
+  "version": 1,
+  "exportedAt": "2026-10-18T03:00:00.000Z",
+  "checklist": {
+    "title": "期限が不正",
+    "items": [{ "title": "存在しない日付", "dueDate": "2026-02-30" }]
+  }
+}
