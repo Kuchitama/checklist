@@ -135,6 +135,118 @@ describe("ユースケースの通しテスト", () => {
     expect(lists.find((l) => l.id === source?.id)).toEqual(source);
   });
 
+  it("US-6: 既存のリストを複製し、一部を変えた別バージョンを作る。元のリストは変わらない", async () => {
+    const user = userEvent.setup();
+    const { router } = renderApp("/");
+    await screen.findByText("まだチェックリストがありません");
+    await createList(user, "リリース手順", ["CI を確認", "タグを打つ"]);
+    await user.click(screen.getByRole("checkbox", { name: "CI を確認" }));
+    await waitFor(async () => {
+      const [stored] = await db.checklists.toArray();
+      expect(stored?.items[0]?.checked).toBe(true);
+    });
+    const [source] = await db.checklists.toArray();
+
+    // 複製 → 未完了のコピーの詳細に着く
+    await user.click(screen.getByRole("button", { name: "操作メニュー" }));
+    await user.click(await screen.findByRole("button", { name: "複製" }));
+    await screen.findByRole("heading", { level: 1, name: "リリース手順 のコピー" });
+    expect(await screen.findByText("0 / 2")).toBeInTheDocument();
+    expect(router.state.location.pathname).not.toBe(`/lists/${source?.id}`);
+
+    // 複製を編集して、タイトルと項目を変える
+    await user.click(screen.getByRole("link", { name: "編集" }));
+    await screen.findByRole("heading", { name: "リストを編集" });
+    const title = screen.getByRole("textbox", { name: /タイトル/ });
+    await user.clear(title);
+    await user.type(title, "ホットフィックス手順");
+    await user.click(screen.getByRole("button", { name: "項目 2 を削除" }));
+    await user.click(screen.getByRole("button", { name: "項目を追加" }));
+    await user.type(screen.getByRole("textbox", { name: "項目 2" }), "動作確認");
+    await user.click(screen.getByRole("button", { name: "保存" }));
+    await screen.findByRole("heading", { level: 1, name: "ホットフィックス手順" });
+
+    // 元のリストはそのまま。一覧には 2 件
+    const lists = await db.checklists.toArray();
+    expect(lists).toHaveLength(2);
+    expect(lists.find((l) => l.id === source?.id)).toEqual(source);
+    const copy = lists.find((l) => l.id !== source?.id);
+    expect(copy?.items.map((i) => [i.title, i.checked])).toEqual([
+      ["CI を確認", false],
+      ["動作確認", false],
+    ]);
+    await user.click(screen.getByRole("link", { name: "戻る" }));
+    const list = await screen.findByRole("list", { name: "チェックリスト一覧" });
+    expect(
+      within(list)
+        .getAllByRole("heading")
+        .map((h) => h.textContent),
+    ).toEqual(["ホットフィックス手順", "リリース手順"]);
+  });
+
+  it("US-7: 増えたリストから、タグで絞り込み、キーワードで検索して目的のものを探す", async () => {
+    const user = userEvent.setup();
+    renderApp("/");
+    await screen.findByText("まだチェックリストがありません");
+
+    /** タグ付きのリストを作る（タグは Enter で確定） */
+    async function createTagged(title: string, tags: string[], items: string[]) {
+      await user.click(await screen.findByRole("link", { name: "新規作成" }));
+      await screen.findByRole("heading", { name: "新しいリスト" });
+      await user.type(screen.getByRole("textbox", { name: /タイトル/ }), title);
+      for (const tag of tags) {
+        await user.type(screen.getByRole("textbox", { name: /タグ/ }), `${tag}{Enter}`);
+      }
+      for (const [index, item] of items.entries()) {
+        await user.click(screen.getByRole("button", { name: "項目を追加" }));
+        await user.type(screen.getByRole("textbox", { name: `項目 ${index + 1}` }), item);
+      }
+      await user.click(screen.getByRole("button", { name: "保存" }));
+      await screen.findByRole("heading", { level: 1, name: title });
+      await user.click(screen.getByRole("link", { name: "戻る" }));
+      await screen.findByRole("list", { name: "チェックリスト一覧" });
+    }
+    await createTagged("リリース手順", ["仕事", "リリース"], ["CI を確認"]);
+    await createTagged("旅行の持ち物", ["家", "旅行"], ["パスポート"]);
+    await createTagged("朝のルーティン", ["家", "習慣"], ["ストレッチ"]);
+    const titles = () =>
+      within(screen.getByRole("list", { name: "チェックリスト一覧" }))
+        .getAllByRole("heading")
+        .map((h) => h.textContent);
+    expect(titles()).toEqual(["朝のルーティン", "旅行の持ち物", "リリース手順"]);
+
+    // タグで絞る
+    const group = screen.getByRole("group", { name: "タグで絞り込む" });
+    await user.click(within(group).getByRole("button", { name: "家" }));
+    await waitFor(() => expect(titles()).toEqual(["朝のルーティン", "旅行の持ち物"]));
+
+    // 検索語でさらに絞る（項目名でも一致する）
+    const box = screen.getByRole("searchbox", { name: "検索" });
+    await user.type(box, "パスポート");
+    await waitFor(() => expect(titles()).toEqual(["旅行の持ち物"]));
+
+    // クリアとタグの解除で戻る
+    await user.click(screen.getByRole("button", { name: "検索をクリア" }));
+    await waitFor(() => expect(titles()).toEqual(["朝のルーティン", "旅行の持ち物"]));
+    await user.click(within(group).getByRole("button", { name: "家" }));
+    await waitFor(() =>
+      expect(titles()).toEqual(["朝のルーティン", "旅行の持ち物", "リリース手順"]),
+    );
+
+    // 一致しなければ案内を出し、目的のリストへは検索結果のカードから進める
+    await user.type(box, "存在しない");
+    expect(
+      await screen.findByText("「存在しない」に一致するリストはありません"),
+    ).toBeInTheDocument();
+    await user.clear(box);
+    await user.type(box, "ci");
+    await waitFor(() => expect(titles()).toEqual(["リリース手順"]));
+    await user.click(screen.getByRole("link", { name: /リリース手順/ }));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "リリース手順" }),
+    ).toBeInTheDocument();
+  });
+
   it("US-2: 持ち物リストを作り、一部をチェックすると一覧のカードに進捗が反映される", async () => {
     const user = userEvent.setup();
     const { router } = renderApp("/");
