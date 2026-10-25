@@ -14,7 +14,7 @@ export function ChecklistCard({ checklist }: { checklist: Checklist }) {
   return (
     <Link
       to={`/lists/${checklist.id}`}
-      className="flex flex-col gap-2 rounded-lg border bg-card p-4 text-card-foreground hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+      className="flex flex-col gap-2 rounded-lg border bg-card p-4 text-card-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     >
       <h2 className="truncate text-base font-bold">{checklist.title}</h2>
       {checklist.tags.length > 0 && (

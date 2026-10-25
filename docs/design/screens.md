@@ -538,7 +538,7 @@ pending: Map<string, number>; // その項目で完了していない toggleItem
 - ダイアログは `role="dialog"` と `aria-modal="true"`、`aria-labelledby` でタイトルを指す。
 - 進捗バーは `role="progressbar"` と `aria-valuenow / aria-valuemax`。
 - ドラッグ並び替えはキーボード操作を必ず提供し、操作中の位置を `aria-live="polite"` で読み上げる。dnd-kit 自身の読み上げ領域は `aria-live="assertive"` で変えられないため、`announcements` は空にして、`polite` の領域を自前に持ち日本語の文言（「項目 2 を持ち上げました」「項目 2 を 3 番目に移動しました」「項目 2 を 3 番目に置きました」「並び替えを取り消しました」）を流す。ハンドルの操作説明（`screenReaderInstructions`）と役割説明（`aria-roledescription`。dnd-kit の既定は英語の `sortable`）も日本語にする。
-- フォーカスリングは消さない。`:focus-visible` で 2px の不透明な `--primary` のリングを、背景色の 2px のオフセットを挟んで出す（ライトの `--ring` は白で 2.59:1、その 50% 透明はさらに低く、非テキストに必要な 3:1 を満たさない。2.2 節）。本アプリで作った部品（タグチップなど）はこの指定に従う。shadcn から取り込んだ部品（`Button`、`Input` など）は取り込み時の `--ring/50` のリングのままで、M5 の仕上げで同じ指定に統一する（Issue #61）。
+- フォーカスリングは消さない。`:focus-visible` で 2px の不透明な `--primary` のリングを、背景色の 2px のオフセットを挟んで出す（ライトの `--ring` は白で 2.59:1、その 50% 透明はさらに低く、非テキストに必要な 3:1 を満たさない。2.2 節）。本アプリで作った部品（タグチップ、カード、ドロップ領域）も、shadcn から取り込んだ部品（`Button`、`Input`、`Textarea`、`Checkbox`、`RadioGroupItem`、`Badge`）も同じ指定にする（M5 の Issue #61 で統一。取り込み時の `--ring/50` のリングは使わない）。ドロップダウンメニューの項目は背景の `--accent` だけでは目立たないため、内側に 2px の `--primary` のリングを出す（メニューの枠で切れないよう内側）。
 - 文字サイズを 200% に拡大しても横スクロールが出ないことを確認する。
 
 ## 9. 未決事項
