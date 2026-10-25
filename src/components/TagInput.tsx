@@ -77,8 +77,9 @@ export function TagInput({ id, tags, draft, onTagsChange, onDraftChange, error, 
 
   return (
     <div className="flex flex-col gap-2">
+      {/* 行の間隔は 16px。上下の行の削除ボタンの当たり判定（上下 8px ずつ広げている）が重ならないようにする */}
       {tags.length > 0 && (
-        <ul aria-label="タグ" className="flex flex-wrap gap-2">
+        <ul aria-label="タグ" className="flex flex-wrap gap-x-2 gap-y-4">
           {tags.map((tag) => (
             <li key={tag} className="max-w-full">
               {/* Badge の overflow-hidden を外し、削除ボタンの当たり判定を外へ広げる。チップ間の gap と同じ 8px だけ広げるので隣と重ならない */}
