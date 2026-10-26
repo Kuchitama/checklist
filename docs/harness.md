@@ -25,7 +25,7 @@
 ## 2. エージェントの作業ループ
 
 1. Issue の「受け入れ基準」を読む。曖昧なら Issue にコメントで質問し、推奨案を添える。
-2. `main` から `feat/<issue 番号>-<要約>` を切る。別の PR の上に積まない。前の PR の CI・レビュー待ちの間に次の Issue をローカルで進めてよいが、push は前の PR がマージされた後に `main` へ載せ替え（`git rebase --onto <新しい土台> <起点> <ブランチ>`。起点は、前のブランチの履歴を書き換える前に `git merge-base <前のブランチ> <ブランチ>` で求めて控えておく。書き換えた後に求めると古い共通祖先になり、マージ済みのコミットまで再適用されて不要な衝突になる。手で SHA を書き写すのも誤りやすい）、`pnpm verify` を通してから行う。載せ替えで衝突したら、解決の後 `git rebase --continue` の前に `pnpm exec biome check` と `pnpm exec tsc --noEmit` を通す（衝突ブロックの外の行を重複させるなどの壊れ方に、その場で気づける）。
+2. `main` から `feat/<issue 番号>-<要約>` を切る。別の PR の上に積まない。前の PR の CI・レビュー待ちの間に次の Issue をローカルで進めてよいが、push は前の PR がマージされた後に `main` へ載せ替え（`git rebase --onto <新しい土台> <起点> <ブランチ>`。起点は、前のブランチの履歴を書き換える前に `git merge-base <前のブランチ> <ブランチ>` で求めて控えておく。書き換えた後に求めると古い共通祖先になり、マージ済みのコミットまで再適用されて不要な衝突になる。手で SHA を書き写すのも誤りやすい）、`pnpm verify` を通してから行う。載せ替えで衝突したら、解決の後 `git rebase --continue` の前に `pnpm exec biome check` と `pnpm exec tsc --noEmit` を通す（衝突ブロックの外の行を重複させるなどの壊れ方に、その場で気づける）。依存（`package.json`）の違うブランチへ切り替えたら `pnpm install --frozen-lockfile` を実行する（セッション開始のフックは開始時のブランチでしか同期しない）。
 3. 受け入れ基準ごとに失敗するテストを先に書く。回帰テストは、実装を 1 箇所壊して失敗することを確かめる。PR を出す前の自己確認は CLAUDE.md 5 章 8。
 4. 実装し、`pnpm verify` が通るまで直す。編集のたびに Biome 整形のフックが走る。
 5. 論理単位でコミットする。pre-commit で整形、pre-push で `pnpm verify` が走る。
@@ -55,6 +55,8 @@
 現在値（2026-10-25、M3 完了時点）: `pnpm verify` 約 18〜23 秒（手元、テスト 228 件）、CI の `verify` ジョブ約 40〜45 秒。M3 の Issue 5 件で人の差し戻し 0 回、自動レビューの指摘 3 件（誤検知 0）。5 件の PR すべてを CLAUDE.md 5 章 7 の条件でエージェントがマージした。集計と学びは `docs/retrospective-m3.md`。
 
 現在値（2026-10-25、M4 完了時点）: `pnpm verify` 約 20〜24 秒（手元、テスト 258 件）、CI の `verify` ジョブ約 40〜45 秒。M4 の Issue 5 件で人の差し戻し 0 回、自動レビューの指摘 5 件（誤検知 0）。5 件の PR すべてを CLAUDE.md 5 章 7 の条件でエージェントがマージした。集計と学びは `docs/retrospective-m4.md`。
+
+現在値（2026-10-25、M5 完了時点）: `pnpm verify` 約 25〜28 秒（手元、テスト 335 件）、`pnpm verify:e2e` 約 21 秒（手元、7 件）、CI の `verify` ジョブ約 80〜90 秒（`playwright install` と E2E を含む）。M5 の Issue 6 件で人の差し戻し 0 回、自動レビューの指摘 11 件（スレッド）+ 2 件（要約のみ）、誤検知 0。7 件の PR すべてを CLAUDE.md 5 章 7 の条件でエージェントがマージした。集計と学びは `docs/retrospective-m5.md`。
 
 ## 4. 完了条件（仕様書 12.2 節）と状態
 
@@ -112,3 +114,5 @@
 - 計測に使う headless Chromium（Playwright）では、`download` 属性に日本語を含むファイル名を与えると `suggestedFilename()` が `download` になる（ASCII の名前は正しい。2026-10-25、PR #48 で確認）。日本語のファイル名は実機のブラウザで確かめる。E2E の書き出しのシナリオは、ファイル名ではなくダウンロードしたファイルの中身で確かめる。
 - Playwright のブラウザをダウンロードできない環境（ネットワークが閉じた開発用コンテナなど）では、`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` に既存の Chromium のパスを渡して `pnpm verify:e2e` を実行する（`playwright.config.ts` の `launchOptions.executablePath`）。Playwright が想定するより古い版でも主要なシナリオは動くが、CI では `playwright install --with-deps chromium` で揃えた版を使う。
 - Vitest のフェイクタイマー（`vi.useFakeTimers()`）の下では、Dexie / fake-indexeddb を使う購読（`useLiveQuery`）が完了せずテストがタイムアウトする（2026-10-25、PR #59 で確認）。時間の境界（デバウンスの 149ms / 150ms など）は、DB を触らない純粋なフックや関数の単体テストでフェイクタイマーにより確かめ、画面のテストは実時間で挙動だけを確かめる。
+- ライブラリが `useEffect` でマウントする要素（dnd-kit の操作説明 `aria-describedby` など）は、描画直後の判定では結び付いていないことがある（2026-10-25、PR #70 で確認。全テストの並列実行で負荷が高いと失敗した）。`waitFor` で待つ。ファイル単体で通っても、`pnpm verify`（全件の並列実行）で確かめる。
+- Copilot のレビューには quota があり、再依頼が「insufficient remaining quota」で実行されないことがある（2026-10-25、PR #76 で確認）。指摘にすべて対応して解決済みにしてあり、追加の push が指摘への対応だけなら、CI の緑で CLAUDE.md 5 章 7 の条件を満たすとみなしてマージしてよい。それ以外の変更を含む push なら人のレビューを待つ。
