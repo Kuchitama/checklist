@@ -18,7 +18,8 @@ description: コード変更（差分、ブランチ、PR）の詳しい説明�
 
 - 説明はすべて日本語で書く（本リポジトリの約束。CLAUDE.md 3 章）。コード、識別子、ファイル名、コマンドは原文のまま書く。
 - CSS と JavaScript を含む、自己完結した 1 つの HTML ファイルにする。全体を 1 枚の長いページにし、節の見出しと目次を置く。最上位の構成にタブを使わない。スマートフォンでも読めるよう、簡単なレスポンシブ対応を入れるとよい。`<html lang="ja">` にする。
-- ファイルはリポジトリの外の共通の場所に置き、ファイル名は必ず今日の日付 `YYYY-MM-DD-` で始める。時系列に並び、バージョン管理の外に置けるからである。例: `/tmp/2026-01-12-explanation-<slug>.html`
+- 外部の資源（CDN のスクリプト、Web フォント、外部の画像など）を読み込まない。GitHub Pages で公開するため、本アプリと同じく外部通信をしない（要件 NFR-07）。PR や Issue への `<a>` のリンクは置いてよい。
+- 公開されるので、差分の外にある秘密情報・個人情報を書き込まない（CLAUDE.md 10 章）。
 - Martin Kleppmann のような明晰さと流れで、読み手を引き込む古典的文体（classic style）で書く。節から節への移り変わりを滑らかにする。
 - 図のコツ。説明全体で使い回せる、少数の図の型を選ぶのが理想である。次のような図が役に立つ。
   - アプリで利用者が見る画面を、ごく簡略化したもの（画面の変更の説明に使う）。
@@ -27,6 +28,13 @@ description: コード変更（差分、ブランチ、PR）の詳しい説明�
   - コードブロックには常に `<pre>` タグを使う。独自に装飾した div を使う場合は、CSS に `white-space: pre-wrap` を**必ず**指定する。指定しないとブラウザが改行をすべて 1 行に潰す。ファイルを保存する前に、HTML ソースのコードブロックを 1 つずつ見て、CSS に `white-space: pre` か `pre-wrap` があることを確かめる。
 - 重要な概念や定義、大事な境界条件などは、囲み（コールアウト）にする。
 
+置き場所と公開（本リポジトリの約束。上流の「リポジトリの外に置く」を置き換えた）:
+
+1. `main` から `docs/explain-diff-<slug>` のブランチを切る。説明する PR のブランチには入れない（1 つの PR は 1 つの目的。CLAUDE.md 5 章 6）。
+2. ファイルを `public/explain-diff/YYYY-MM-DD-<slug>.html` に置く。日付は今日の日付（時系列に並べるため）、`<slug>` は英小文字・数字・ハイフンだけにする。例: `public/explain-diff/2026-10-27-pr-79-input-borders.html`
+3. 一覧 `public/explain-diff/index.html` の `<ul>` の先頭に `<li><a href="./<ファイル名>">YYYY-MM-DD <説明の題名></a></li>` を加える。最初の 1 件を加えるときは「まだありません。」の段落を消す。対応は `src/explainDiff.test.ts` が確かめる。
+4. `pnpm verify` を通して PR を作る。`main` にマージされると、GitHub Pages の <https://kuchitama.github.io/checklist/explain-diff/> に載る。
+
 ## 出典
 
-geoffreylitt の公開 Gist <https://gist.github.com/geoffreylitt/a29df1b5f9865506e8952488eac3d524> の `explain-diff-html.md`（版 126e7fe、2026-10-27 取得）を日本語に訳し、出力を日本語にする指示と `lang="ja"` を加えた。MIT ライセンスに沿って扱う（同じディレクトリの `LICENSE`）。
+geoffreylitt の公開 Gist <https://gist.github.com/geoffreylitt/a29df1b5f9865506e8952488eac3d524> の `explain-diff-html.md`（版 126e7fe、2026-10-27 取得）を日本語に訳し、出力を日本語にする指示と `lang="ja"`、外部の資源を読み込まない指示を加え、置き場所をリポジトリの外から GitHub Pages（`public/explain-diff/`）に変えた。MIT ライセンスに沿って扱う（同じディレクトリの `LICENSE`）。

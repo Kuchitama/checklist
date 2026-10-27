@@ -250,7 +250,7 @@ clearAllData(): Promise<void>
 ## 7. PWA
 
 - `manifest.webmanifest`: 名前「チェックリスト」、`display: standalone`、`start_url: ./`、アイコン 192 / 512px（maskable 含む）、テーマカラーはライト・ダーク両対応。
-- Service Worker: `generateSW` 方式。ビルド成果物をプリキャッシュし、ナビゲーションは `index.html` にフォールバック。
+- Service Worker: `generateSW` 方式。ビルド成果物をプリキャッシュし、ナビゲーションは `index.html` にフォールバック。ただし変更の説明（`public/explain-diff/`。11 章）はアプリの一部ではないので、プリキャッシュせず、ナビゲーションのフォールバックからも外す（`globIgnores`、`navigateFallbackDenylist`）。
 - 更新: 新しい SW を検出したら画面下部に「新しいバージョンがあります。再読み込み」を出し、ユーザー操作で反映する（自動リロードはしない）。
 
 ## 8. テーマ・デザイン方針
@@ -276,6 +276,7 @@ clearAllData(): Promise<void>
 ├── docs/               # 本仕様書と設計書（docs/design/）
 ├── lefthook.yml        # pre-commit / pre-push フック
 ├── public/             # アイコン、manifest 用画像
+│   └── explain-diff/   # 変更の説明（開発者向けの静的 HTML。11 章）
 ├── src/
 │   ├── app/            # ルーティング、レイアウト、テーマ適用
 │   ├── pages/          # 画面単位のコンポーネント（ListIndex, ListDetail, ListEdit, Import, Settings）
@@ -311,6 +312,7 @@ CI では単体テストを必須、E2E は Chromium のみ実行する。
   - E2E 工程は M5 で追加する。それまでの CI は `vite build` までで終わる。
 - **deploy.yml**: `push` to `main` で `vite build --base=/checklist/` → `actions/upload-pages-artifact` → `actions/deploy-pages`。
 - `base` はリポジトリ名に合わせ `/checklist/` とし、hash 形式のルーティングを使うため SPA フォールバックは不要。
+- 変更の説明: スキル `explain-diff-html`（`.claude/skills/`）で作った PR の説明の HTML を `public/explain-diff/` に置き、アプリと一緒に `/checklist/explain-diff/` で公開する。アプリの一部ではなく、外部の資源を読み込まない（NFR-07）。一覧とファイルの対応と外部資源の有無は `src/explainDiff.test.ts`、Service Worker の対象外であることは `e2e/pwa.spec.ts` が確かめる。
 
 ## 12. 開発計画（マイルストーン）
 

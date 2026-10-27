@@ -15,7 +15,7 @@
 | H-2 約束事 | 文書の優先順位、既定値、作業手順、レビュー対応の型、禁止事項 | `CLAUDE.md` | H |
 | H-3 Git フック | pre-commit で変更ファイルを Biome 整形、pre-push で `pnpm verify`。`pnpm install` 時の `prepare` で有効化 | `lefthook.yml` | H |
 | H-3 Claude Code フック | セッション開始時に `pnpm install --frozen-lockfile` で依存をロックファイルに同期（`prepare` で lefthook も有効化）。Bash の禁止コマンド（フックの迂回、テスト削除、main への force push、npm / npx / yarn）を拒否。編集後に Biome 整形 | `.claude/settings.json`、`.claude/hooks/` | H |
-| H-3 Claude Code スキル | 変更の説明を作るスキル `explain-diff-html`（背景・直感・コードの順の日本語の説明と 5 問の小テストを、1 枚の HTML にまとめる）。出典は geoffreylitt の公開 Gist（a29df1b5f9865506e8952488eac3d524、版 126e7fe、2026-10-27 取得）で、日本語に訳し、出力を日本語にする指示を加えた。Gist にライセンスの記載はなく、オーナーの判断で MIT ライセンスに沿って扱う（著作権表示と許諾表示を `LICENSE` に置く）。同じ Gist の Notion 版（`explain-diff-notion`）はオーナーの判断で入れない | `.claude/skills/` | M5 の後（2026-10-27） |
+| H-3 Claude Code スキル | 変更の説明を作るスキル `explain-diff-html`（背景・直感・コードの順の日本語の説明と 5 問の小テストを、1 枚の HTML にまとめる）。出典は geoffreylitt の公開 Gist（a29df1b5f9865506e8952488eac3d524、版 126e7fe、2026-10-27 取得）で、日本語に訳し、出力を日本語にする指示を加えた。出力は `public/explain-diff/` に置き、GitHub Pages の `/checklist/explain-diff/` で公開する（仕様書 11 章）。Gist にライセンスの記載はなく、オーナーの判断で MIT ライセンスに沿って扱う（著作権表示と許諾表示を `LICENSE` に置く）。同じ Gist の Notion 版（`explain-diff-notion`）はオーナーの判断で入れない | `.claude/skills/`、`public/explain-diff/` | M5 の後（2026-10-27） |
 | H-3 権限 | pnpm、node、git の日常操作、読み取り系コマンドを事前承認し、確認待ちで止まらないようにする | `.claude/settings.json` | H |
 | H-4 作業単位 | Issue テンプレート（目的・受け入れ基準・対象外・関連する仕様の節）、PR テンプレート（対応 Issue・変更内容・検証・レビュー点） | `.github/ISSUE_TEMPLATE/`、`.github/pull_request_template.md` | H |
 | H-4 自動レビュー | Copilot のコードレビュー。リポジトリ設定の自動実行は数時間遅れることがあるため、エージェントが PR 作成直後に API（`request_copilot_review`）で依頼する。指摘への対応はエージェントのループに含める | リポジトリ設定、エージェントの作業ループ（2 章） | 導入済み |
