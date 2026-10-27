@@ -54,6 +54,10 @@ export default defineConfig({
       workbox: {
         // マニフェストはプラグインが登録するので glob に含めない
         globPatterns: ["**/*.{js,css,html,svg,png}"],
+        // 変更の説明（public/explain-diff/）はアプリの一部ではないので、プリキャッシュせず、
+        // ナビゲーションもアプリの index.html に差し替えない（仕様書 7 章）。node_modules は workbox の既定の除外
+        globIgnores: ["**/node_modules/**/*", "explain-diff/**"],
+        navigateFallbackDenylist: [/\/explain-diff(?:[/?]|$)/],
         // 古いバージョンのキャッシュは新しい SW の有効化時に消す
         cleanupOutdatedCaches: true,
       },

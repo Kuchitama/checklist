@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>変更の説明</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --fg: #0a0a0a;
+        --muted: #525252;
+        --link: #1d4ed8;
+        --border: #d4d4d4;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0a0a0a;
+          --fg: #fafafa;
+          --muted: #a3a3a3;
+          --link: #93c5fd;
+          --border: #404040;
+        }
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: system-ui, sans-serif;
+        line-height: 1.7;
+      }
+      main {
+        max-width: 48rem;
+        margin: 0 auto;
+        padding: 2rem 1rem;
+      }
+      p {
+        color: var(--muted);
+      }
+      ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        border-top: 1px solid var(--border);
+      }
+      li {
+        border-bottom: 1px solid var(--border);
+      }
+      a {
+        display: block;
+        min-height: 44px;
+        padding: 0.625rem 0;
+        color: var(--link);
+        overflow-wrap: anywhere;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>変更の説明</h1>
+      <p>
+        このリポジトリのコード変更（PR）を、背景・直感・コード・小テストの順に説明したページの一覧です。新しい順に並べています。
+      </p>
+      <!-- 説明を足したら、この ul の先頭に li を加える（.claude/skills/explain-diff-html/SKILL.md）。
+           ファイルとリンクの対応は src/explainDiff.test.ts が確かめる -->
+      <ul>
+      </ul>
+      <p class="empty">まだありません。</p>
+    </main>
+  </body>
+</html>

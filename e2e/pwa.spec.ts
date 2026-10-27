@@ -75,3 +75,28 @@ test("テーマ: 設定でダークを選ぶと html.dark が付き、再読み�
   await page.getByRole("radio", { name: "ライト" }).click();
   await expect(page.locator("html")).not.toHaveClass(/dark/);
 });
+
+test("変更の説明（/explain-diff/）は Service Worker の対象外で、アプリに差し替わらない", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByText("まだチェックリストがありません")).toBeVisible();
+  await page.evaluate(() => navigator.serviceWorker.ready);
+  await page.reload();
+  expect(await page.evaluate(() => !!navigator.serviceWorker.controller)).toBe(true);
+
+  // SW の制御下でも、ナビゲーションのフォールバック（アプリの index.html）にならず、説明の一覧が開く
+  await page.goto("/explain-diff/");
+  await expect(page.getByRole("heading", { level: 1, name: "変更の説明" })).toBeVisible();
+
+  // 説明はアプリのプリキャッシュに入れない（アプリの更新やオフラインの容量に影響させない）
+  const cached = await page.evaluate(async () => {
+    const urls: string[] = [];
+    for (const key of await caches.keys()) {
+      for (const request of await (await caches.open(key)).keys()) urls.push(request.url);
+    }
+    return urls;
+  });
+  expect(cached.length).toBeGreaterThan(0);
+  expect(cached.filter((url) => url.includes("/explain-diff/"))).toEqual([]);
+});
