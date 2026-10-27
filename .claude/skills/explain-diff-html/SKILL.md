@@ -1,29 +1,32 @@
 ---
 name: explain-diff-html
-description: Use when the user asks for a rich explanation of a code change, diff, branch, or PR. Produces HTML output.
+description: コード変更（差分、ブランチ、PR）の詳しい説明を頼まれたときに使う。日本語の説明を 1 枚の HTML にまとめる。
 ---
 
-# Explain Diff
+# 変更の説明
 
-Please make me a rich, interactive explanation of the specified code change.
+指定されたコード変更について、詳しく、操作できる説明を作る。
 
-It should have these sections:
+次の節で構成する。
 
-- Background: Explain the existing system relevant to this change. (You should broadly explore surrounding code for this.) We don't know how much the reader already knows, so include a deep background for beginners (note that it can be skipped if the reader is already familiar), and then a more narrow background directly relevant to the change.
-- Intuition: Explain the core intuition for the code change. The focus here is to explain the essence, not the full details. Use concrete examples with toy data. Use figures and diagrams liberally.
-- Code: Do a high-level walkthrough of the changes to the code. Group/order the changes in an understandable way.
-- Quiz: Come up with five questions that test the reader's knowledge of this PR. This should be medium difficulty, difficult enough that you actually need to understand the substance of the PR to answer them, but not gotchas. The goal is to help the reader make sure that they've actually understood. These should be presented as interactive multiple-choice questions, and when the user clicks, it tells them whether they were correct and gives feedback.
+- 背景: この変更に関係する既存の仕組みを説明する（周辺のコードを広く読んで調べる）。読み手の前提知識は分からないので、初学者向けの深い背景（知っている読み手は飛ばしてよいと書き添える）を置き、続けて変更に直接関係する狭い背景を置く。
+- 直感: 変更の核となる考え方を説明する。細部を網羅するのではなく、本質を伝えることに集中する。小さな例のデータを使った具体例を出す。図をふんだんに使う。
+- コード: コードの変更を大づかみにたどる。変更は理解しやすい単位にまとめ、理解しやすい順に並べる。
+- 小テスト: この PR の理解を確かめる問題を 5 問作る。難易度は中程度にする。PR の中身を本当に理解していないと解けない程度に難しく、ただし引っかけ問題にはしない。読み手が実際に理解できたかを自分で確かめられるようにするのが目的。操作できる多肢選択式にし、選択肢を押すと正誤とその理由を表示する。
 
-Format:
+形式:
 
-- Output a single self-contained HTML file which includes CSS and JavaScript. Make the whole thing one long page with section headers and a table of contents. Don't use tabs for the top-level structure. Basic responsive styling so you can view it on a phone is nice too. Put the file in a global place on my computer outside of the code repo, and make sure the filename always starts with today's date in `YYYY-MM-DD-` format, because it helps keep the files time-sorted and out of version control. For example: /tmp/2026-01-12-explanation-<slug>.html
-- Please write with the clarity and flow of Martin Kleppmann, making it engaging and written in classic style. Transitions between sections should be smooth.
-- Some tips on diagrams. Ideally, you should pick a small number of diagram families that can be reused throughout the explanation to explain various cases. Some useful kinds of diagrams:
-  - A very simplified version of the UI that the user sees in the app, to explain UI changes.
-  - A system diagram showing data flow or communication between components. Make sure to include example data here!
-- Don't use ASCII diagrams. Always use simple HTML designs for your diagrams, HTML lists for lists of things, etc.
-  - For code blocks, always use `<pre>` tags. If you use a custom styled div instead, it **must** have
-    `white-space: pre-wrap` in its CSS, or the browser will collapse all newlines into a single line.
-    Before saving the file, scan each code block in the HTML source and confirm its CSS includes
-    `white-space: pre` or `pre-wrap`.
-- Use callouts for key concepts or definitions, important edge cases, etc.
+- 説明はすべて日本語で書く（本リポジトリの約束。CLAUDE.md 3 章）。コード、識別子、ファイル名、コマンドは原文のまま書く。
+- CSS と JavaScript を含む、自己完結した 1 つの HTML ファイルにする。全体を 1 枚の長いページにし、節の見出しと目次を置く。最上位の構成にタブを使わない。スマートフォンでも読めるよう、簡単なレスポンシブ対応を入れるとよい。`<html lang="ja">` にする。
+- ファイルはリポジトリの外の共通の場所に置き、ファイル名は必ず今日の日付 `YYYY-MM-DD-` で始める。時系列に並び、バージョン管理の外に置けるからである。例: `/tmp/2026-01-12-explanation-<slug>.html`
+- Martin Kleppmann のような明晰さと流れで、読み手を引き込む古典的文体（classic style）で書く。節から節への移り変わりを滑らかにする。
+- 図のコツ。説明全体で使い回せる、少数の図の型を選ぶのが理想である。次のような図が役に立つ。
+  - アプリで利用者が見る画面を、ごく簡略化したもの（画面の変更の説明に使う）。
+  - コンポーネント間のデータの流れややり取りを示すシステム図。例のデータを必ず入れる。
+- ASCII の図は使わない。図は常に簡単な HTML で描き、物の列挙には HTML のリストを使う。
+  - コードブロックには常に `<pre>` タグを使う。独自に装飾した div を使う場合は、CSS に `white-space: pre-wrap` を**必ず**指定する。指定しないとブラウザが改行をすべて 1 行に潰す。ファイルを保存する前に、HTML ソースのコードブロックを 1 つずつ見て、CSS に `white-space: pre` か `pre-wrap` があることを確かめる。
+- 重要な概念や定義、大事な境界条件などは、囲み（コールアウト）にする。
+
+## 出典
+
+geoffreylitt の公開 Gist <https://gist.github.com/geoffreylitt/a29df1b5f9865506e8952488eac3d524> の `explain-diff-html.md`（版 126e7fe、2026-10-27 取得）を日本語に訳し、出力を日本語にする指示と `lang="ja"` を加えた。MIT ライセンスに沿って扱う（同じディレクトリの `LICENSE`）。
