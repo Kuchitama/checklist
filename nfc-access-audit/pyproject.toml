@@ -1,0 +1,26 @@
+[project]
+name = "nfc-access-audit"
+version = "0.1.0"
+description = "認可されたアクセス制御カードの複製耐性アセスメント器（Raspberry Pi Zero + PN532 + Waveshare 2.13 e-Paper）"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+# 実機（Raspberry Pi）でのみ必要。ユニットテストには不要。
+# libnfc 本体は OS パッケージ（apt）。Python からは nfc-list / nfc-mfclassic / mfoc を subprocess で駆動する。
+# e-Paper は Waveshare の epd ドライバ + spidev + RPi.GPIO（Pi 上で導入）。
+hardware = []
+dev = [
+  "pytest>=8",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nfc_audit"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
